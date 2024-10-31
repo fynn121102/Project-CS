@@ -1,8 +1,3 @@
-import streamlit as st
-st.write ("hooray, weve connected everything")
-st.write ("now I can send text to the application! Isnt that fun")
-st.write ("does it also work without pushing?")
-st.write ("no, you have to push it!")
 # weather_map_app_free.py
 import streamlit as st
 import requests
