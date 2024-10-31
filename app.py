@@ -1,4 +1,4 @@
-# weather_map_app_free.py
+# app.py
 import streamlit as st
 import requests
 import folium
