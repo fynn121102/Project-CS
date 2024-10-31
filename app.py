@@ -1,3 +1,5 @@
+pip install folium streamlit-folium
+
 # weather_map_app_free.py
 import streamlit as st
 import requests
