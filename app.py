@@ -1,4 +1,5 @@
 # app.py
+pip install folium streamlit-folium
 import streamlit as st
 import requests
 import folium
