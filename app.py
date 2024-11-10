@@ -84,3 +84,4 @@ for event in events:
 
 # Render map in Streamlit
 st_folium(m, width=700, height=500)
+
