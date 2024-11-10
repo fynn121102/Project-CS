@@ -1,20 +1,4 @@
 # Import necessary libraries
-import sys
-import subprocess
-
-# Function to install required packages
-def install_packages():
-    packages = ["streamlit", "folium", "requests", "streamlit-folium"]
-    for package in packages:
-        try:
-            __import__(package)
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-# Install missing packages
-install_packages()
-
-# Import libraries after installation
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
