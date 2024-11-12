@@ -1,6 +1,7 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
+from geopy.geocoders import Nominatim
 import requests
 from datetime import datetime, timedelta
 import random
@@ -8,6 +9,9 @@ import random
 # API URL and default city coordinates
 WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
 DEFAULT_LAT, DEFAULT_LON = 47.4239, 9.3748  # St. Gallen
+
+# Initialize geolocator for place search
+geolocator = Nominatim(user_agent="community_app")
 
 # Pre-existing events with updated dates
 events = [
@@ -24,7 +28,19 @@ events = [
         "weather_emoji": "☀️",
         "cancellation_prob": 0.2,
     },
-    # Additional events here...
+    {
+        "name": "Outdoor Movie Night",
+        "organizer": "Anna Schmidt",
+        "location": [47.4229, 9.3708],
+        "date": "2024-11-20",
+        "time": "19:00",
+        "description": "Watch a classic movie under the stars!",
+        "participants": 15,
+        "max_participants": 25,
+        "weather": "Clear skies, 15°C",
+        "weather_emoji": "🌕",
+        "cancellation_prob": 0.1,
+    },
 ]
 
 # Function to get weather forecast from Open-Meteo API
@@ -54,11 +70,11 @@ def get_weather_forecast(lat, lon, date):
 
 # Function to calculate cancellation probability based on weather
 def calculate_cancellation_probability(precipitation):
-    if precipitation > 15:  # Heavy rain
+    if precipitation > 15:
         return 0.8
-    elif precipitation > 5:  # Moderate rain
+    elif precipitation > 5:
         return 0.5
-    else:  # Light or no rain
+    else:
         return 0.1
 
 # Streamlit app title and description
@@ -73,10 +89,29 @@ date = st.sidebar.date_input("Event Date", min_value=datetime(2024, 11, 14), max
 time = st.sidebar.time_input("Event Time")
 description = st.sidebar.text_area("Description")
 max_participants = st.sidebar.number_input("Max Participants", min_value=1, value=10)
-location_lat = st.sidebar.number_input("Latitude", min_value=47.0, max_value=48.0, value=DEFAULT_LAT)
-location_lon = st.sidebar.number_input("Longitude", min_value=9.0, max_value=10.0, value=DEFAULT_LON)
 
-if st.sidebar.button("Add Event"):
+# Location search
+location_search = st.sidebar.text_input("Search for a place")
+if location_search:
+    location = geolocator.geocode(location_search)
+    if location:
+        st.sidebar.write(f"Found location: {location.address}")
+        map_center = [location.latitude, location.longitude]
+    else:
+        st.sidebar.error("Location not found. Try a different search.")
+else:
+    map_center = [DEFAULT_LAT, DEFAULT_LON]
+
+# Map for selecting event location
+m = folium.Map(location=map_center, zoom_start=13)
+click_marker = st_folium(m, width=700, height=500)
+
+if click_marker["last_clicked"] is not None:
+    location_lat = click_marker["last_clicked"]["lat"]
+    location_lon = click_marker["last_clicked"]["lng"]
+    st.sidebar.write(f"Selected location: {location_lat}, {location_lon}")
+
+if st.sidebar.button("Add Event") and "location_lat" in locals() and "location_lon" in locals():
     weather_data = get_weather_forecast(location_lat, location_lon, date)
     if weather_data:
         precipitation = weather_data["precipitation"]
@@ -101,14 +136,10 @@ if st.sidebar.button("Add Event"):
         })
         st.sidebar.success("Event added successfully!")
 
-# Display map
-map_center = [47.4239, 9.3748]
-m = folium.Map(location=map_center, zoom_start=13)
-
+# Display existing events on the map
 for event in events:
     cancel_percent = int(event["cancellation_prob"] * 100)
     
-    # Create HTML popup with event details
     popup_html = f"""
     <b>{event['name']}</b> {event['weather_emoji']}<br>
     <i>{event['date']}, {event['time']}</i><br>
@@ -127,7 +158,6 @@ for event in events:
         icon=folium.Icon(color="blue" if event["participants"] < event["max_participants"] else "gray")
     ).add_to(m)
 
-# Display the map in Streamlit
 st_folium(m, width=700, height=500)
 
 # Sidebar for joining events
