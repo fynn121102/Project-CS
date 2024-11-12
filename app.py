@@ -1,11 +1,15 @@
-# Import necessary libraries
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
+import requests
 from datetime import datetime, timedelta
 import random
 
-# Initialize event list with future dates
+# API URL and default city coordinates
+WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
+DEFAULT_LAT, DEFAULT_LON = 47.4239, 9.3748  # St. Gallen
+
+# Pre-existing events with updated dates
 events = [
     {
         "name": "Football Match",
@@ -20,33 +24,42 @@ events = [
         "weather_emoji": "☀️",
         "cancellation_prob": 0.2,
     },
-    {
-        "name": "Ride to Zurich",
-        "organizer": "Tanja Musterfrau",
-        "location": [47.4249, 9.3768],
-        "date": "2024-11-25",
-        "time": "10:15",
-        "description": "Carpool ride to Zurich. Join if interested!",
-        "participants": 2,
-        "max_participants": 3,
-        "weather": "Cloudy, 15°C",
-        "weather_emoji": "☁️",
-        "cancellation_prob": 0.1,
-    },
-    {
-        "name": "Hiking Trip",
-        "organizer": "Lara Testperson",
-        "location": [47.4299, 9.3825],
-        "date": "2024-12-12",
-        "time": "08:00",
-        "description": "An adventurous hike in the mountains.",
-        "participants": 5,
-        "max_participants": 10,
-        "weather": "Rainy, 12°C",
-        "weather_emoji": "🌧️",
-        "cancellation_prob": 0.6,
-    },
+    # Additional events here...
 ]
+
+# Function to get weather forecast from Open-Meteo API
+def get_weather_forecast(lat, lon, date):
+    date_str = date.strftime("%Y-%m-%d")
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "daily": "precipitation_sum,temperature_2m_min,temperature_2m_max",
+        "start_date": date_str,
+        "end_date": date_str,
+        "timezone": "Europe/Zurich",
+    }
+    response = requests.get(WEATHER_API_URL, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        forecast = data.get("daily", {})
+        weather = {
+            "precipitation": forecast.get("precipitation_sum", [0])[0],
+            "temp_min": forecast.get("temperature_2m_min", [0])[0],
+            "temp_max": forecast.get("temperature_2m_max", [0])[0],
+        }
+        return weather
+    else:
+        st.error("Error retrieving weather data.")
+        return None
+
+# Function to calculate cancellation probability based on weather
+def calculate_cancellation_probability(precipitation):
+    if precipitation > 15:  # Heavy rain
+        return 0.8
+    elif precipitation > 5:  # Moderate rain
+        return 0.5
+    else:  # Light or no rain
+        return 0.1
 
 # Streamlit app title and description
 st.title("Community Event Map")
@@ -60,40 +73,39 @@ date = st.sidebar.date_input("Event Date", min_value=datetime(2024, 11, 14), max
 time = st.sidebar.time_input("Event Time")
 description = st.sidebar.text_area("Description")
 max_participants = st.sidebar.number_input("Max Participants", min_value=1, value=10)
-weather = st.sidebar.selectbox("Weather Forecast", ["Sunny, 18°C ☀️", "Cloudy, 15°C ☁️", "Rainy, 12°C 🌧️"])
-location_lat = st.sidebar.number_input("Latitude", min_value=47.0, max_value=48.0, value=47.4239)
-location_lon = st.sidebar.number_input("Longitude", min_value=9.0, max_value=10.0, value=9.3748)
-cancellation_prob = st.sidebar.slider("Cancellation Probability", 0.0, 1.0, 0.2)
+location_lat = st.sidebar.number_input("Latitude", min_value=47.0, max_value=48.0, value=DEFAULT_LAT)
+location_lon = st.sidebar.number_input("Longitude", min_value=9.0, max_value=10.0, value=DEFAULT_LON)
 
 if st.sidebar.button("Add Event"):
-    # Add new event to the events list
-    weather_type, emoji = weather.split(" ")
-    events.append({
-        "name": name,
-        "organizer": organizer,
-        "location": [location_lat, location_lon],
-        "date": date.strftime("%Y-%m-%d"),
-        "time": time.strftime("%H:%M"),
-        "description": description,
-        "participants": 0,
-        "max_participants": max_participants,
-        "weather": weather_type,
-        "weather_emoji": emoji,
-        "cancellation_prob": cancellation_prob,
-    })
-    st.sidebar.success("Event added successfully!")
+    weather_data = get_weather_forecast(location_lat, location_lon, date)
+    if weather_data:
+        precipitation = weather_data["precipitation"]
+        temp_min = weather_data["temp_min"]
+        temp_max = weather_data["temp_max"]
+        weather = f"{temp_max}°C/{temp_min}°C, Precipitation: {precipitation} mm"
+        cancellation_prob = calculate_cancellation_probability(precipitation)
+        emoji = "☀️" if cancellation_prob < 0.3 else "🌧️" if cancellation_prob > 0.6 else "☁️"
+        
+        events.append({
+            "name": name,
+            "organizer": organizer,
+            "location": [location_lat, location_lon],
+            "date": date.strftime("%Y-%m-%d"),
+            "time": time.strftime("%H:%M"),
+            "description": description,
+            "participants": 0,
+            "max_participants": max_participants,
+            "weather": weather,
+            "weather_emoji": emoji,
+            "cancellation_prob": cancellation_prob,
+        })
+        st.sidebar.success("Event added successfully!")
 
-# Filter events based on search
-st.sidebar.title("Search Events")
-search_term = st.sidebar.text_input("Search by Event Name")
-filtered_events = [event for event in events if search_term.lower() in event["name"].lower()]
-
-# Initialize the Folium map centered around St. Gallen
+# Display map
 map_center = [47.4239, 9.3748]
 m = folium.Map(location=map_center, zoom_start=13)
 
-# Display filtered event markers on the map
-for event in filtered_events:
+for event in events:
     cancel_percent = int(event["cancellation_prob"] * 100)
     
     # Create HTML popup with event details
@@ -118,9 +130,9 @@ for event in filtered_events:
 # Display the map in Streamlit
 st_folium(m, width=700, height=500)
 
-# Sidebar to join events
+# Sidebar for joining events
 st.sidebar.title("Join an Event")
-event_to_join = st.sidebar.selectbox("Select an event to join", [event["name"] for event in filtered_events])
+event_to_join = st.sidebar.selectbox("Select an event to join", [event["name"] for event in events])
 
 if st.sidebar.button("Join Event"):
     for event in events:
@@ -131,16 +143,4 @@ if st.sidebar.button("Join Event"):
             else:
                 st.sidebar.error(f"Sorry, {event_to_join} is fully booked.")
 
-# Display event details in the sidebar
-st.sidebar.title("Event Details")
-for event in filtered_events:
-    st.sidebar.subheader(f"{event['name']} {event['weather_emoji']}")
-    st.sidebar.write(f"Date: {event['date']}, Time: {event['time']}")
-    st.sidebar.write(f"Organizer: {event['organizer']}")
-    st.sidebar.write(f"Participants: {event['participants']} / {event['max_participants']}")
-    st.sidebar.write(f"Weather: {event['weather']}")
-    st.sidebar.write(f"Description: {event['description']}")
-    st.sidebar.progress(event["cancellation_prob"])
-    st.sidebar.write(f"Cancellation Probability: {int(event['cancellation_prob'] * 100)}%")
-    st.sidebar.write("---")
 
