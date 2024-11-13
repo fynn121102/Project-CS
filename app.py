@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import folium
 from streamlit_folium import st_folium
 from geopy.geocoders import Nominatim
+import requests
 import random
 
 # App Title and Header
@@ -37,25 +38,44 @@ if "events" not in st.session_state:
         }
     ]
 
-# Function to calculate cancellation probability
+# Fetch real-time weather forecast for the event location
+def get_weather_forecast(lat, lon, date):
+    # Open-Meteo API endpoint
+    endpoint = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "daily": "precipitation_sum,precipitation_hours",
+        "start_date": date.strftime("%Y-%m-%d"),
+        "end_date": date.strftime("%Y-%m-%d"),
+        "timezone": "auto"
+    }
+    
+    response = requests.get(endpoint, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        if "daily" in data and "precipitation_sum" in data["daily"]:
+            precip = data["daily"]["precipitation_sum"][0]
+            precip_hours = data["daily"]["precipitation_hours"][0]
+            return precip, precip_hours
+    return None, None  # Return None if data is unavailable
+
+# Function to calculate cancellation probability based on weather
 def calculate_cancellation_probability(event):
-    if event["outdoor"]:
-        # Simulate a weather-based calculation
-        forecast = random.choice(["sunny", "cloudy", "rainy", "stormy"])
-        if forecast == "rainy":
-            return 70  # Higher probability due to rain
-        elif forecast == "stormy":
-            return 90  # Very high due to storm risk
-        else:
-            return 20  # Lower probability if clear or cloudy
-    else:
-        return 5  # Minimal risk for indoor events
+    precip, precip_hours = get_weather_forecast(event["location"][0], event["location"][1], event["date"])
+    if event["outdoor"] and precip is not None:
+        # Higher probability for outdoor events with precipitation
+        if precip > 5 or precip_hours > 3:  # Thresholds for heavy rain conditions
+            return 80  # High probability of cancellation due to rain
+        elif precip > 1:
+            return 50  # Moderate probability if light rain is forecasted
+    return 10  # Low probability for clear conditions or indoor events
 
 # Function to render map with events
 def render_map(center=[47.42391, 9.37477], zoom_start=13, search_query=""):
     map_ = folium.Map(location=center, zoom_start=zoom_start)
     for event in st.session_state["events"]:
-        # Calculate cancellation probability
+        # Calculate cancellation probability and get weather
         prob = calculate_cancellation_probability(event)
         color = "red" if prob > 50 else "green"
         
@@ -66,9 +86,8 @@ def render_map(center=[47.42391, 9.37477], zoom_start=13, search_query=""):
         Participants: {event['signed_up']} / {event['capacity']}<br>
         Date & Time: {event['date']}<br>
         Description: {event['description']}<br>
-        <b>Weather Forecast:</b> {forecast}<br>
         <b>Cancellation Probability:</b> {prob}%<br>
-        <b>Join Now</b><br>
+        <button>Join Now</button>
         """
         
         iframe = folium.IFrame(popup_html, width=300, height=150)
