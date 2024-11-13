@@ -1,167 +1,125 @@
 import streamlit as st
-from datetime import datetime, timedelta
 import folium
 from streamlit_folium import st_folium
-from geopy.geocoders import Nominatim
-import requests
-import random
 import matplotlib.pyplot as plt
 from io import BytesIO
+import base64
+from datetime import datetime
+import random
 
-# App Title and Header
-st.title("Community Bridger")
-st.subheader("Connect with fellows around you!")
+# Initial data for events
+events = [
+    {
+        "name": "Football Match",
+        "organizer": "John Doe",
+        "location": [47.4239, 9.3748],
+        "date": "2024-11-20",
+        "description": "Join us for a friendly football match!",
+        "participants": 15,
+        "max_participants": 20,
+        "event_type": "outdoor",
+        "cancellation_prob": 10  # placeholder for demonstration
+    },
+    {
+        "name": "Study Group",
+        "organizer": "Jane Smith",
+        "location": [47.4245, 9.3769],
+        "date": "2024-11-22",
+        "description": "Group study session for exams.",
+        "participants": 8,
+        "max_participants": 10,
+        "event_type": "indoor",
+        "cancellation_prob": 0  # placeholder for demonstration
+    }
+]
 
-# Initialize geolocator for address search
-geolocator = Nominatim(user_agent="community_bridger")
+# Function to create and render the map
+def render_map(search_query=""):
+    # Create the base map
+    base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
 
-# Data Storage
-if "events" not in st.session_state:
-    st.session_state["events"] = [
-        {
-            "name": "Football Match",
-            "organizer": "Alice",
-            "location": [47.42391, 9.37477],
-            "date": datetime(2024, 11, 20, 15, 30),
-            "description": "Join us for a friendly football match at the city park.",
-            "capacity": 20,
-            "signed_up": 5,
-            "outdoor": True
-        },
-        {
-            "name": "Study Group Meetup",
-            "organizer": "Bob",
-            "location": [47.42456, 9.37616],
-            "date": datetime(2024, 11, 24, 18, 0),
-            "description": "Study session for upcoming exams.",
-            "capacity": 15,
-            "signed_up": 8,
-            "outdoor": False
-        }
+    # Filter events based on search query
+    filtered_events = [
+        event for event in events
+        if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower()
     ]
 
-# Fetch real-time weather forecast for the event location
-def get_weather_forecast(lat, lon, date):
-    endpoint = "https://api.open-meteo.com/v1/forecast"
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "daily": "precipitation_sum,precipitation_hours",
-        "start_date": date.strftime("%Y-%m-%d"),
-        "end_date": date.strftime("%Y-%m-%d"),
-        "timezone": "auto"
-    }
-    response = requests.get(endpoint, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        if "daily" in data and "precipitation_sum" in data["daily"]:
-            precip = data["daily"]["precipitation_sum"][0]
-            precip_hours = data["daily"]["precipitation_hours"][0]
-            return precip, precip_hours
-    return None, None
+    # Loop over events and add markers with popups
+    for event in filtered_events:
+        # Generate participant graph
+        fig, ax = plt.subplots()
+        ax.bar(["Joined", "Max Capacity"], [event["participants"], event["max_participants"]], color=["green", "grey"])
+        ax.set_title("Participants")
+        ax.set_ylabel("Count")
 
-# Calculate cancellation probability based on weather
-def calculate_cancellation_probability(event):
-    precip, precip_hours = get_weather_forecast(event["location"][0], event["location"][1], event["date"])
-    if event["outdoor"] and precip is not None:
-        if precip > 5 or precip_hours > 3:
-            return 80
-        elif precip > 1:
-            return 50
-    return 10
+        # Save graph to a BytesIO object
+        graph_image = BytesIO()
+        plt.savefig(graph_image, format="png")
+        plt.close(fig)
+        graph_image_base64 = base64.b64encode(graph_image.getvalue()).decode("utf-8")  # Encode to base64 string
 
-# Generate graphical bar plot for participant and cancellation probability
-def generate_event_graphs(event):
-    fig, ax = plt.subplots(figsize=(2, 1.2))
-    cancellation_prob = calculate_cancellation_probability(event)
-    participant_count = event["signed_up"] / event["capacity"] * 100
-    
-    ax.bar(["Participants", "Cancellation"], [participant_count, cancellation_prob], color=["green", "red"])
-    ax.set_ylim(0, 100)
-    ax.set_ylabel("Percentage")
-    
-    # Save plot to a BytesIO object
-    img_bytes = BytesIO()
-    plt.savefig(img_bytes, format="png")
-    img_bytes.seek(0)
-    plt.close(fig)
-    
-    return img_bytes
-
-# Render map with events and search functionality
-def render_map(center=[47.42391, 9.37477], zoom_start=13, search_query=""):
-    map_ = folium.Map(location=center, zoom_start=zoom_start)
-    for event in st.session_state["events"]:
-        cancellation_prob = calculate_cancellation_probability(event)
-        graph_image = generate_event_graphs(event)
-        
-        # Highlight marker if search query matches
-        marker_color = "blue" if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower() else "green"
-        
-        popup_html = f"""
-        <b style="font-family: Arial, sans-serif;">{event['name']}</b><br>
-        Organizer: {event['organizer']}<br>
-        Date & Time: {event['date']}<br>
-        Participants: {event['signed_up']} / {event['capacity']}<br>
-        Description: {event['description']}<br>
-        <b>Cancellation Probability:</b> {cancellation_prob}%<br>
-        <img src="data:image/png;base64,{graph_image.getvalue().decode()}" width="100%">
-        <button>Join Event</button>
+        # Create popup content with the event details and embedded image
+        popup_content = f"""
+        <div style="width:200px;">
+            <h4>{event['name']}</h4>
+            <p><b>Organized by:</b> {event['organizer']}</p>
+            <p><b>Date:</b> {event['date']}</p>
+            <p><b>Description:</b> {event['description']}</p>
+            <p><b>Weather Forecast:</b> 🌤️</p>  <!-- Placeholder emoji -->
+            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
+            <img src="data:image/png;base64,{graph_image_base64}" width="100%">
+        </div>
         """
-        
-        iframe = folium.IFrame(popup_html, width=300, height=180)
+
+        # Add marker with popup
         folium.Marker(
-            event["location"],
-            popup=folium.Popup(iframe),
-            icon=folium.Icon(color=marker_color)
-        ).add_to(map_)
-    return map_
+            location=event["location"],
+            popup=folium.Popup(popup_content, max_width=300),
+            tooltip=event["name"]
+        ).add_to(base_map)
 
-# Event Creation Sidebar Form
-with st.sidebar.form("new_event"):
-    st.subheader("Create a New Event")
-    name = st.text_input("Event Name")
-    organizer = st.text_input("Organizer")
-    date = st.date_input("Date", datetime.today())
-    time = st.time_input("Time", datetime.now().time())
-    description = st.text_area("Description")
-    capacity = st.number_input("Capacity", min_value=1, step=1)
-    outdoor = st.checkbox("Outdoor Event")
-    location_name = st.text_input("Location (Type city name)")
+    return base_map
 
-    # Geolocation and map addition
-    if st.form_submit_button("Add Event"):
-        if location_name:
-            location = geolocator.geocode(location_name)
-            if location:
-                lat_lng = [location.latitude, location.longitude]
-                new_event = {
-                    "name": name,
-                    "organizer": organizer,
-                    "location": lat_lng,
-                    "date": datetime.combine(date, time),
-                    "description": description,
-                    "capacity": capacity,
-                    "signed_up": 0,
-                    "outdoor": outdoor
-                }
-                st.session_state["events"].append(new_event)
-                st.success(f"Event '{name}' added at {location_name}")
-            else:
-                st.error("Location not found. Please try a different city.")
+# Streamlit app configuration
+st.title("Community Bridger")
+st.header("Connect with fellows around you!")
 
-# Search bar for events
-search_query = st.text_input("Search Events by Name or Description", "").lower()
+# Event search bar
+search_query = st.text_input("Search events", "")
 
-# Display the map with events
+# Render the map and display it in Streamlit
 map_ = render_map(search_query=search_query)
-st_folium(map_, width=700, height=500)
+st_data = st_folium(map_, width=700)
 
-# Join Event Button
-for i, event in enumerate(st.session_state["events"]):
-    if st.button(f"Join {event['name']}", key=f"join_{i}"):
-        if event["signed_up"] < event["capacity"]:
-            st.session_state["events"][i]["signed_up"] += 1
-            st.success(f"You joined the event: {event['name']}")
+# Form to add new events
+with st.form("add_event_form"):
+    st.subheader("Add a New Event")
+    name = st.text_input("Event Name")
+    organizer = st.text_input("Organizer Name")
+    description = st.text_area("Event Description")
+    date = st.date_input("Event Date", value=datetime.now())
+    max_participants = st.number_input("Max Participants", min_value=1, step=1)
+    event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
+    location = st_data["last_clicked"] if st_data else None  # Get location from map click
+
+    if st.form_submit_button("Add Event"):
+        if not location:
+            st.warning("Please select a location on the map for the event.")
         else:
-            st.warning(f"Event '{event['name']}' is already full!")
+            new_event = {
+                "name": name,
+                "organizer": organizer,
+                "location": [location["lat"], location["lng"]],
+                "date": date.strftime("%Y-%m-%d"),
+                "description": description,
+                "participants": 0,
+                "max_participants": max_participants,
+                "event_type": event_type,
+                "cancellation_prob": random.randint(5, 30)  # Random for demo purposes
+            }
+            events.append(new_event)
+            st.success(f"Event '{name}' added successfully!")
+            st.experimental_rerun()  # Refresh the app to display the new event
+
+# Notes for users
+st.write("Click on a location on the map to set the event's location when adding a new event.")
