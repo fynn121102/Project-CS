@@ -18,7 +18,7 @@ events = [
         "participants": 15,
         "max_participants": 20,
         "event_type": "outdoor",
-        "cancellation_prob": 10  # placeholder for demonstration
+        "cancellation_prob": 30  # placeholder probability
     },
     {
         "name": "Study Group",
@@ -29,7 +29,7 @@ events = [
         "participants": 8,
         "max_participants": 10,
         "event_type": "indoor",
-        "cancellation_prob": 0  # placeholder for demonstration
+        "cancellation_prob": 5  # placeholder probability
     }
 ]
 
@@ -46,17 +46,22 @@ def render_map(search_query=""):
 
     # Loop over events and add markers with popups
     for event in filtered_events:
-        # Generate participant graph
-        fig, ax = plt.subplots()
-        ax.bar(["Joined", "Max Capacity"], [event["participants"], event["max_participants"]], color=["green", "grey"])
-        ax.set_title("Participants")
-        ax.set_ylabel("Count")
+        # Generate participant and cancellation probability graphs
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3, 4))
+        ax1.barh(["Joined", "Capacity"], [event["participants"], event["max_participants"]], color=["green", "grey"])
+        ax1.set_xlim(0, event["max_participants"])
+        ax1.set_title("Participants", fontsize=10)
 
-        # Save graph to a BytesIO object
+        ax2.barh([""], [event["cancellation_prob"]], color="red")
+        ax2.set_xlim(0, 100)
+        ax2.set_title("Cancellation Probability", fontsize=10)
+
+        # Save graphs to BytesIO
         graph_image = BytesIO()
+        plt.tight_layout()
         plt.savefig(graph_image, format="png")
         plt.close(fig)
-        graph_image_base64 = base64.b64encode(graph_image.getvalue()).decode("utf-8")  # Encode to base64 string
+        graph_image_base64 = base64.b64encode(graph_image.getvalue()).decode("utf-8")
 
         # Create popup content with the event details and embedded image
         popup_content = f"""
@@ -66,14 +71,17 @@ def render_map(search_query=""):
             <p><b>Date:</b> {event['date']}</p>
             <p><b>Description:</b> {event['description']}</p>
             <p><b>Weather Forecast:</b> 🌤️</p>  <!-- Placeholder emoji -->
-            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
             <img src="data:image/png;base64,{graph_image_base64}" width="100%">
+            <form action="" method="post">
+                <button type="submit" style="margin-top:10px;">Join Event</button>
+            </form>
         </div>
         """
 
         # Add marker with popup
         folium.Marker(
             location=event["location"],
+            icon=folium.Icon(color="blue", icon="info-sign"),
             popup=folium.Popup(popup_content, max_width=300),
             tooltip=event["name"]
         ).add_to(base_map)
@@ -81,7 +89,7 @@ def render_map(search_query=""):
     return base_map
 
 # Streamlit app configuration
-st.title("Community Bridger")
+st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
 
 # Event search bar
