@@ -4,8 +4,9 @@ from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
-from datetime import datetime, time
+from datetime import datetime
 import random
+from geopy.geocoders import Nominatim
 
 # Initialize events list with sample data
 events = [
@@ -40,7 +41,7 @@ events = [
 # List to store events user has joined
 user_enrolled_events = []
 
-# Function to render the map with events and search functionality
+# Function to render the main map
 def render_map(search_query=""):
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
 
@@ -52,40 +53,24 @@ def render_map(search_query=""):
 
     # Display each event on the map
     for idx, event in enumerate(filtered_events):
-        # Create participant and cancellation probability bars
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3, 3))
-        ax1.barh([""], [event["max_participants"]], color="grey", edgecolor="black")
-        ax1.barh([""], [event["participants"]], color="green", edgecolor="black")
-        ax1.text(event["participants"], 0, f"{event['participants']}/{event['max_participants']}", va='center')
-        ax1.set_xlim(0, event["max_participants"])
-        ax1.set_title("Participants", fontsize=10)
-        ax1.axis("off")
+        # Create a horizontal bar for participants
+        participants_ratio = event["participants"] / event["max_participants"]
+        participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
+                          f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
+                          f'</div>'
 
-        ax2.barh([""], [event["cancellation_prob"]], color="red", edgecolor="black")
-        ax2.text(event["cancellation_prob"], 0, f"{event['cancellation_prob']}%", va='center')
-        ax2.set_xlim(0, 100)
-        ax2.set_title("Cancellation Probability", fontsize=10)
-        ax2.axis("off")
-
-        # Convert matplotlib graph to image
-        graph_image = BytesIO()
-        plt.tight_layout()
-        plt.savefig(graph_image, format="png")
-        plt.close(fig)
-        graph_image_base64 = base64.b64encode(graph_image.getvalue()).decode("utf-8")
-
-        # Popup content with participant and cancellation info
         popup_content = f"""
-        <div style="font-family:Arial; width:200px;">
+        <div style="font-family:Arial; width:250px;">
             <h4>{event['name']}</h4>
             <p><b>Organized by:</b> {event['organizer']}</p>
             <p><b>Date:</b> {event['date']} at {event['time']}</p>
             <p><b>Description:</b> {event['description']}</p>
             <p><b>Weather:</b> {event['weather']['forecast']} ({event['weather']['temp']}°C)</p>
-            <img src="data:image/png;base64,{graph_image_base64}" width="100%">
-            <form>
-                <button type="button" onclick="window.location.href='?join_event={idx}'" style="margin-top:10px;">Join Event</button>
-            </form>
+            <p><b>Participants:</b></p>
+            {participant_bar}
+            <p>{event['participants']} / {event['max_participants']}</p>
+            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
+            <button onclick="window.location.href='?join_event={idx}'">Join Event</button>
         </div>
         """
 
@@ -109,10 +94,14 @@ search_query = st.text_input("Search events", "")
 join_event = st.experimental_get_query_params().get("join_event")
 if join_event:
     event_idx = int(join_event[0])
-    if event_idx < len(events) and events[event_idx]["participants"] < events[event_idx]["max_participants"]:
-        events[event_idx]["participants"] += 1
-        user_enrolled_events.append(events[event_idx])
-        st.experimental_set_query_params()
+    if event_idx < len(events):
+        event = events[event_idx]
+        if event["participants"] < event["max_participants"]:
+            event["participants"] += 1
+            if event not in user_enrolled_events:
+                user_enrolled_events.append(event)
+            st.success(f"You successfully joined '{event['name']}'!")
+            st.experimental_set_query_params()
 
 # Display the map
 map_ = render_map(search_query=search_query)
@@ -131,11 +120,23 @@ with st.form("add_event_form"):
 
     location_choice = st.radio("Select event location", ["Click on Map", "Enter Address"])
     location = None
+
     if location_choice == "Click on Map":
-        location = st_data["last_clicked"] if st_data else None
+        st.write("Click on the map below to select a location.")
+        mini_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
+        location_picker = st_folium(mini_map, height=300, width=700)
+        if location_picker and location_picker["last_clicked"]:
+            location = location_picker["last_clicked"]
+
     elif location_choice == "Enter Address":
         address = st.text_input("Event Address (Street and Number)")
-        location = {"lat": 47.4245, "lng": 9.3769}  # Placeholder for actual geolocation API
+        if address:
+            geolocator = Nominatim(user_agent="community-bridger")
+            geocoded_location = geolocator.geocode(address)
+            if geocoded_location:
+                location = [geocoded_location.latitude, geocoded_location.longitude]
+            else:
+                st.warning("Address not found. Please try a different address.")
 
     if st.form_submit_button("Add Event"):
         if not location:
@@ -144,7 +145,7 @@ with st.form("add_event_form"):
             new_event = {
                 "name": name,
                 "organizer": organizer,
-                "location": [location["lat"], location["lng"]],
+                "location": location,
                 "date": date.strftime("%Y-%m-%d"),
                 "time": time.strftime("%H:%M"),
                 "description": description,
@@ -165,4 +166,5 @@ if user_enrolled_events:
         st.write(f"- {enrolled_event['name']} on {enrolled_event['date']} at {enrolled_event['time']}")
 else:
     st.write("You have not joined any events yet.")
+
 
