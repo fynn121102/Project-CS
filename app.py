@@ -20,7 +20,7 @@ events = [
         "max_participants": 20,
         "event_type": "outdoor",
         "cancellation_prob": 30,
-        "weather": {"forecast": "Sunny", "temp": 20}
+        "weather": {"forecast": "Sunny 🌞", "temp": 20}
     },
     {
         "name": "Study Group",
@@ -33,7 +33,7 @@ events = [
         "max_participants": 10,
         "event_type": "indoor",
         "cancellation_prob": 5,
-        "weather": {"forecast": "Cloudy", "temp": 18}
+        "weather": {"forecast": "Cloudy ☁️", "temp": 18}
     }
 ]
 
@@ -51,7 +51,7 @@ def render_map(search_query=""):
     ]
 
     # Display each event on the map
-    for event in filtered_events:
+    for idx, event in enumerate(filtered_events):
         # Create participant and cancellation probability bars
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3, 3))
         ax1.barh([""], [event["max_participants"]], color="grey", edgecolor="black")
@@ -83,8 +83,8 @@ def render_map(search_query=""):
             <p><b>Description:</b> {event['description']}</p>
             <p><b>Weather:</b> {event['weather']['forecast']} ({event['weather']['temp']}°C)</p>
             <img src="data:image/png;base64,{graph_image_base64}" width="100%">
-            <form action="" method="post">
-                <button type="submit" style="margin-top:10px;">Join Event</button>
+            <form>
+                <button type="button" onclick="window.location.href='?join_event={idx}'" style="margin-top:10px;">Join Event</button>
             </form>
         </div>
         """
@@ -105,6 +105,15 @@ st.header("Connect with fellows around you!")
 # Event search bar
 search_query = st.text_input("Search events", "")
 
+# Handle event joining
+join_event = st.experimental_get_query_params().get("join_event")
+if join_event:
+    event_idx = int(join_event[0])
+    if event_idx < len(events) and events[event_idx]["participants"] < events[event_idx]["max_participants"]:
+        events[event_idx]["participants"] += 1
+        user_enrolled_events.append(events[event_idx])
+        st.experimental_set_query_params()
+
 # Display the map
 map_ = render_map(search_query=search_query)
 st_data = st_folium(map_, width=700)
@@ -121,9 +130,10 @@ with st.form("add_event_form"):
     event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
 
     location_choice = st.radio("Select event location", ["Click on Map", "Enter Address"])
+    location = None
     if location_choice == "Click on Map":
         location = st_data["last_clicked"] if st_data else None
-    else:
+    elif location_choice == "Enter Address":
         address = st.text_input("Event Address (Street and Number)")
         location = {"lat": 47.4245, "lng": 9.3769}  # Placeholder for actual geolocation API
 
@@ -142,7 +152,7 @@ with st.form("add_event_form"):
                 "max_participants": max_participants,
                 "event_type": event_type,
                 "cancellation_prob": random.randint(5, 30),
-                "weather": {"forecast": "Cloudy", "temp": random.randint(15, 25)}  # Placeholder weather
+                "weather": {"forecast": "Partly Cloudy ⛅", "temp": random.randint(15, 25)}  # Placeholder weather
             }
             events.append(new_event)
             st.success(f"Event '{name}' added successfully!")
@@ -155,3 +165,4 @@ if user_enrolled_events:
         st.write(f"- {enrolled_event['name']} on {enrolled_event['date']} at {enrolled_event['time']}")
 else:
     st.write("You have not joined any events yet.")
+
