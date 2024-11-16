@@ -7,7 +7,7 @@ from datetime import datetime
 import random
 
 # Firebase Initialization
-cred = credentials.Certificate("c26b9e5939f6ca4c6d82")
+cred = credentials.Certificate("1d46963c16c1c5f29e038998d8ab3982a7a2bd49")
 initialize_app(cred)
 db = firestore.client()
 events_ref = db.collection("events")
