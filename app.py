@@ -13,6 +13,7 @@ db = firestore.client()
 events_ref = db.collection("events")
 
 # Geocoding function using OpenCage Geocoder API
+'''
 def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
     url = f"https://api.opencagedata.com/geocode/v1/json?q={address}&key={api_key}"
     response = requests.get(url)
@@ -22,8 +23,10 @@ def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
             coordinates = results[0]['geometry']
             return [coordinates['lat'], coordinates['lng']]
     return None
+'''
 
 # Fetch events from Firestore
+'''
 def fetch_events():
     docs = events_ref.stream()
     return [doc.to_dict() for doc in docs]
@@ -120,3 +123,4 @@ with st.form("add_event_form"):
                 st.error("Could not find location. Please try again.")
         else:
             st.error("Address is required.")
+'''
