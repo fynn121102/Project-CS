@@ -1,11 +1,11 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
-from geopy.geocoders import Nominatim
-import random
+import requests
 from datetime import datetime
+import random
 
-# Initialize event data
+# Initialize data
 events = [
     {
         "name": "Football Match",
@@ -35,37 +35,38 @@ events = [
     }
 ]
 
-# User's joined events
 user_enrolled_events = []
 
-# Function to render the map
+# Geocoding function using OpenCage Geocoder API
+def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
+    url = f"https://api.opencagedata.com/geocode/v1/json?q={address}&key={api_key}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        results = response.json().get('results', [])
+        if results:
+            coordinates = results[0]['geometry']
+            return [coordinates['lat'], coordinates['lng']]
+    return None
+
+# Render map with events
 def render_map(search_query=""):
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
-
-    # Filter events by search query
     filtered_events = [
         event for event in events
         if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower()
     ]
-
     for idx, event in enumerate(filtered_events):
-        # Visual bar for participants
         participants_ratio = event["participants"] / event["max_participants"]
         participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
                           f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
                           f'</div>'
-
-        # Visual bar for cancellation probability
         cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
                                 f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
                                 f'</div>'
-
-        # Determine join/leave button state
         if event in user_enrolled_events:
             action_button = f'<button onclick="window.location.href=\'?leave_event={idx}\'">Leave Event</button>'
         else:
             action_button = f'<button onclick="window.location.href=\'?join_event={idx}\'">Join Event</button>'
-
         popup_content = f"""
         <div style="font-family:Arial; width:250px;">
             <h4>{event['name']}</h4>
@@ -81,24 +82,20 @@ def render_map(search_query=""):
             {action_button}
         </div>
         """
-
         folium.Marker(
             location=event["location"],
             icon=folium.Icon(color="blue", icon="info-sign"),
             popup=folium.Popup(popup_content, max_width=300),
             tooltip=event["name"]
         ).add_to(base_map)
-
     return base_map
 
-# Streamlit app layout
+# Streamlit layout
 st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
-
-# Event search bar
 search_query = st.text_input("Search events", "")
 
-# Handle join/leave events
+# Join/Leave Event Handling
 params = st.experimental_get_query_params()
 if "join_event" in params:
     event_idx = int(params["join_event"][0])
@@ -116,11 +113,11 @@ if "leave_event" in params:
         user_enrolled_events.remove(event)
     st.experimental_set_query_params()
 
-# Display map
+# Display Map
 map_ = render_map(search_query=search_query)
 st_data = st_folium(map_, width=700)
 
-# Form to add a new event
+# Add a New Event
 with st.form("add_event_form"):
     st.subheader("Add a New Event")
     name = st.text_input("Event Name")
@@ -134,10 +131,8 @@ with st.form("add_event_form"):
 
     if st.form_submit_button("Add Event"):
         if address:
-            geolocator = Nominatim(user_agent="community-bridger")
-            geocoded_location = geolocator.geocode(address)
-            if geocoded_location:
-                location = [geocoded_location.latitude, geocoded_location.longitude]
+            location = geocode_address(address)
+            if location:
                 new_event = {
                     "name": name,
                     "organizer": organizer,
@@ -155,9 +150,11 @@ with st.form("add_event_form"):
                 st.success(f"Event '{name}' added successfully!")
                 st.experimental_rerun()
             else:
-                st.warning("Address not found. Please try again.")
+                st.error("Could not find location. Please try again.")
+        else:
+            st.error("Address is required.")
 
-# User's joined events
+# User's Joined Events
 st.subheader("Your Joined Events")
 if user_enrolled_events:
     for event in user_enrolled_events:
