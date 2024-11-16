@@ -1,14 +1,13 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
-import matplotlib.pyplot as plt
-from io import BytesIO
-import base64
-from datetime import datetime
-import random
 from geopy.geocoders import Nominatim
+import random
+from datetime import datetime
+from io import BytesIO
+import matplotlib.pyplot as plt
 
-# Initialize events list with sample data
+# Initialize event data
 events = [
     {
         "name": "Football Match",
@@ -38,26 +37,36 @@ events = [
     }
 ]
 
-# List to store events user has joined
+# User's joined events
 user_enrolled_events = []
 
-# Function to render the main map
+# Function to render the map
 def render_map(search_query=""):
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
 
-    # Filter events based on search query
+    # Filter events by search query
     filtered_events = [
         event for event in events
         if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower()
     ]
 
-    # Display each event on the map
     for idx, event in enumerate(filtered_events):
-        # Create a horizontal bar for participants
+        # Visual bar for participants
         participants_ratio = event["participants"] / event["max_participants"]
         participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
                           f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
                           f'</div>'
+
+        # Visual bar for cancellation probability
+        cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
+                                f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
+                                f'</div>'
+
+        # Determine join/leave button state
+        if event in user_enrolled_events:
+            action_button = f'<button onclick="window.location.href=\'?leave_event={idx}\'">Leave Event</button>'
+        else:
+            action_button = f'<button onclick="window.location.href=\'?join_event={idx}\'">Join Event</button>'
 
         popup_content = f"""
         <div style="font-family:Arial; width:250px;">
@@ -69,8 +78,10 @@ def render_map(search_query=""):
             <p><b>Participants:</b></p>
             {participant_bar}
             <p>{event['participants']} / {event['max_participants']}</p>
-            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
-            <button onclick="window.location.href='?join_event={idx}'">Join Event</button>
+            <p><b>Cancellation Probability:</b></p>
+            {cancellation_prob_bar}
+            <p>{event['cancellation_prob']}%</p>
+            {action_button}
         </div>
         """
 
@@ -90,20 +101,25 @@ st.header("Connect with fellows around you!")
 # Event search bar
 search_query = st.text_input("Search events", "")
 
-# Handle event joining
-join_event = st.experimental_get_query_params().get("join_event")
-if join_event:
-    event_idx = int(join_event[0])
-    if event_idx < len(events):
-        event = events[event_idx]
-        if event["participants"] < event["max_participants"]:
-            event["participants"] += 1
-            if event not in user_enrolled_events:
-                user_enrolled_events.append(event)
-            st.success(f"You successfully joined '{event['name']}'!")
-            st.experimental_set_query_params()
+# Handle join/leave events
+params = st.experimental_get_query_params()
+if "join_event" in params:
+    event_idx = int(params["join_event"][0])
+    event = events[event_idx]
+    if event not in user_enrolled_events and event["participants"] < event["max_participants"]:
+        event["participants"] += 1
+        user_enrolled_events.append(event)
+    st.experimental_set_query_params()
 
-# Display the map
+if "leave_event" in params:
+    event_idx = int(params["leave_event"][0])
+    event = events[event_idx]
+    if event in user_enrolled_events:
+        event["participants"] -= 1
+        user_enrolled_events.remove(event)
+    st.experimental_set_query_params()
+
+# Display map
 map_ = render_map(search_query=search_query)
 st_data = st_folium(map_, width=700)
 
@@ -117,54 +133,40 @@ with st.form("add_event_form"):
     time = st.time_input("Event Time", value=datetime.now().time())
     max_participants = st.number_input("Max Participants", min_value=1, step=1)
     event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
+    address = st.text_input("Event Address (Street and Number)")
 
-    location_choice = st.radio("Select event location", ["Click on Map", "Enter Address"])
-    location = None
-
-    if location_choice == "Click on Map":
-        st.write("Click on the map below to select a location.")
-        mini_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
-        location_picker = st_folium(mini_map, height=300, width=700)
-        if location_picker and location_picker["last_clicked"]:
-            location = location_picker["last_clicked"]
-
-    elif location_choice == "Enter Address":
-        address = st.text_input("Event Address (Street and Number)")
+    if st.form_submit_button("Add Event"):
         if address:
             geolocator = Nominatim(user_agent="community-bridger")
             geocoded_location = geolocator.geocode(address)
             if geocoded_location:
                 location = [geocoded_location.latitude, geocoded_location.longitude]
+                new_event = {
+                    "name": name,
+                    "organizer": organizer,
+                    "location": location,
+                    "date": date.strftime("%Y-%m-%d"),
+                    "time": time.strftime("%H:%M"),
+                    "description": description,
+                    "participants": 0,
+                    "max_participants": max_participants,
+                    "event_type": event_type,
+                    "cancellation_prob": random.randint(5, 30),
+                    "weather": {"forecast": "Partly Cloudy ⛅", "temp": random.randint(15, 25)}
+                }
+                events.append(new_event)
+                st.success(f"Event '{name}' added successfully!")
+                st.experimental_rerun()
             else:
-                st.warning("Address not found. Please try a different address.")
+                st.warning("Address not found. Please try again.")
 
-    if st.form_submit_button("Add Event"):
-        if not location:
-            st.warning("Please select a location on the map or enter an address for the event.")
-        else:
-            new_event = {
-                "name": name,
-                "organizer": organizer,
-                "location": location,
-                "date": date.strftime("%Y-%m-%d"),
-                "time": time.strftime("%H:%M"),
-                "description": description,
-                "participants": 0,
-                "max_participants": max_participants,
-                "event_type": event_type,
-                "cancellation_prob": random.randint(5, 30),
-                "weather": {"forecast": "Partly Cloudy ⛅", "temp": random.randint(15, 25)}  # Placeholder weather
-            }
-            events.append(new_event)
-            st.success(f"Event '{name}' added successfully!")
-            st.experimental_rerun()
-
-# Display user's joined events
+# User's joined events
 st.subheader("Your Joined Events")
 if user_enrolled_events:
-    for enrolled_event in user_enrolled_events:
-        st.write(f"- {enrolled_event['name']} on {enrolled_event['date']} at {enrolled_event['time']}")
+    for event in user_enrolled_events:
+        st.write(f"- {event['name']} on {event['date']} at {event['time']}")
 else:
     st.write("You have not joined any events yet.")
+
 
 
