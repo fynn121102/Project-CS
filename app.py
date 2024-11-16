@@ -4,8 +4,6 @@ from streamlit_folium import st_folium
 from geopy.geocoders import Nominatim
 import random
 from datetime import datetime
-from io import BytesIO
-import matplotlib.pyplot as plt
 
 # Initialize event data
 events = [
@@ -78,9 +76,8 @@ def render_map(search_query=""):
             <p><b>Participants:</b></p>
             {participant_bar}
             <p>{event['participants']} / {event['max_participants']}</p>
-            <p><b>Cancellation Probability:</b></p>
+            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
             {cancellation_prob_bar}
-            <p>{event['cancellation_prob']}%</p>
             {action_button}
         </div>
         """
@@ -167,7 +164,3 @@ if user_enrolled_events:
         st.write(f"- {event['name']} on {event['date']} at {event['time']}")
 else:
     st.write("You have not joined any events yet.")
-
-
-
-
