@@ -1,16 +1,23 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
-from firebase_admin import credentials, firestore, initialize_app
+from google.cloud import firestore
 import requests
 from datetime import datetime
 import random
 
-# Firebase Initialization
-cred = credentials.Certificate("\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCyOUwGuy0m4HMn\nWwj7qcXL1YcW4Y6WFuoL+gRDsYqEZBel/3NZXzEcz65ZY9PTHabQLD4K9gKBLc5c\nGHrdOWip4yB6r3tSjaeuG1dfoH+f9oSD2bGkBVH1qncZV+hyMwvj53TfgIKkUbAf\nxOnFjrV2PA02/rjPAyg9XGXyclkwiQl1Dg7h9ki55pAtBHlMfpYeW5Q7UAhYtik1\n4ekwCHqIiSc1bbNhl47/p2dHGZwfQKxrpAqPQ1MSiiMXiBdEf0bxc4YrnhPSdiEd\ntye6SEOkjvlPQgmoMTugzi1xrN2i8Qi+Wr8ooR9NDDtOu2KVNA+3meur4MML1kW4\ntwzXsiVbAgMBAAECggEALD/Uk/FCFx5wCMvt8YnnzaGAzloHLFWZG4siJup8MT2m\nr3S6n2xmhbg8mf4SmB6LDbGGX/NPkOIeE7iSPL3lshRtung6Prdj8/Le4SO4vC8Z\nHKFenRIjFMMTmeu9DymEYLvVRS6jgQe1GlYqEn5JqIblYwugN+mZQo7f0u+4HDfn\np7MvAHy32k+vT1SwaI8yjoK1KoNDa8IZPYdlRqGd/OEQNnLiY2jtF9IvGQFm6mb4\nILq5IsMDvNdLL/ub1Bmo0L1hcKjIihVcWebT8LxULObLdjxU9WQ7kyd7Eicy6Rxc\nK6urIfAHpwhqCE679UQDXZNJ3PlD6iSdtPFJaFhVJQKBgQDjNqSmc646uni4sgJj\n+K/c62JsYC+TXEGoRCdm2chuPkvptIqu5NZEf+vcr8Mrg8oeixqLhrBmvwm9sBID\nSltR4LgfF2zG1kGGYyI0UA/tLFk08qP0MtXqQsvmXBhITcY5CN82IW64UoNmFPm6\nRdWLb/QbXwXL2uGLcWtVfC1o/wKBgQDIzb4AUpiCD1Oi7pM7g/Do09zpgKOt6nDC\nXjis5PNQ7uqBtLnAmj/hAU4ythqFmSTwSrzFtN0s2X/QRDLoqSmpbi7jXH+BqVVU\nhBx8SpGfxiThOTqz/SE3XsNhn7JJSkKOUmwMmApcO2STOtyIfW+bzKL3islQnIGo\nnACj/PGHpQKBgHqGhAGSzjizR9hpfeqFN+jNMjU5JU606F8h6ZGIDZKNm4g6qLKp\ninZD+V/3lCrKFdukrbrh9gxiJpGY+g22MkqUARYbHriW35zlppNJPV1rlet8kTdl\nln+OZ8Agl6Od9S/afewF2VwieuM4mnZ9pCteQufjtQ96SDhXAEeIAEDnAoGBAIkg\nz5cC0LlI5DHJQOyMzvEA9cTUH3L+PeDOXV/cvjjP33+SPqPD8smijZdd+sCvc6VR\nNJbDS6N8KKe+WxG9rADTiNulaEHQtMARtC5A8i+tLbRM08TkoVFhuoWpfCRGvSra\nKIV1MuYHfUh6Eu520sgPuF7Z/V66cmUFm/5hF0QtAoGAQIXEuC7cGLxz2t9nUVlu\nT2YX2ATJMB+goP8GZm+CGGBH5mL8+ykJWKiEcQO168nFMjfFrjLo25W8A3YPRIMN\nGra6nDA7ughEH/cUPLe1BsKAT9BW4v3XQunA+o25aDDrVrXquaKIANmZPSNkUNSD\nC5Es2Ms6QA62Yif0hm0UkA0=\n")
-initialize_app(cred)
-db = firestore.client()
-events_ref = db.collection("events")
+# Authenticate to Firestore with the JSON account key.
+db = firestore.Client.from_service_account_json("firestore-key.json")
+
+# Create a reference to the Google post.
+doc_ref = db.collection("posts").document("Google")
+
+# Then get the data at that reference.
+doc = doc_ref.get()
+
+# Let's see what we got!
+st.write("The id is: ", doc.id)
+st.write("The contents are: ", doc.to_dict())
 
 # Geocoding function using OpenCage Geocoder API
 def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
