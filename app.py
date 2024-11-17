@@ -1,4 +1,3 @@
-import os
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, db
@@ -6,49 +5,36 @@ import folium
 from streamlit_folium import st_folium
 import random
 from datetime import datetime
-import google.auth.exceptions
 
-# Path to the service account key
-service_account_path = "serviceAccountKey.json"
-
-# Initialize Firebase Admin SDK with error handling
-if not os.path.exists(service_account_path):
-    st.error("Firebase service account key not found. Please upload the key file.")
-else:
-    try:
-        # Check if Firebase app is already initialized
-        if not firebase_admin._apps:
-            # Initialize Firebase Admin with the service account key
-            cred = credentials.Certificate(service_account_path)
-            firebase_admin.initialize_app(cred, {
-                'databaseURL': 'https://community-bridger-default-rtdb.europe-west1.firebasedatabase.app/'
-            })
-        else:
-            print("Firebase is already initialized.")
-    except google.auth.exceptions.RefreshError as e:
-        st.error(f"Refresh error: {e}")
-        raise
-    except Exception as e:
-        st.error(f"Error initializing Firebase: {e}")
-        raise
+# Initialize Firebase
+if not firebase_admin._apps:
+    cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'https://community-bridger.firebaseio.com/'  # Firebase Realtime Database URL
+    })
 
 # Firebase database references
-events_ref = db.reference("events")
-user_joined_ref = db.reference("user_joined")
-names_ref = db.reference("names")
+def get_events_ref():
+    return db.reference("events")
+
+def get_user_joined_ref():
+    return db.reference("user_joined")
+
+def get_names_ref():
+    return db.reference("names")
 
 # Fetch events from Firebase
 def fetch_events():
     try:
-        return events_ref.get() or {}
+        return get_events_ref().get() or []
     except Exception as e:
         st.error(f"Error fetching events: {e}")
-        return {}
+        return []
 
 # Fetch joined events
 def fetch_joined_events():
     try:
-        return user_joined_ref.get() or {}
+        return get_user_joined_ref().get() or {}
     except Exception as e:
         st.error(f"Error fetching joined events: {e}")
         return {}
@@ -56,14 +42,14 @@ def fetch_joined_events():
 # Save a name to Firebase
 def save_name(name):
     try:
-        names_ref.push(name)
+        get_names_ref().push(name)
     except Exception as e:
         st.error(f"Error saving name: {e}")
 
 # Fetch all saved names
 def fetch_names():
     try:
-        return names_ref.get() or {}
+        return get_names_ref().get() or {}
     except Exception as e:
         st.error(f"Error fetching names: {e}")
         return {}
@@ -71,32 +57,32 @@ def fetch_names():
 # Add an event to Firebase
 def add_event_to_firebase(event_data):
     try:
-        events_ref.push(event_data)
+        get_events_ref().push(event_data)
     except Exception as e:
         st.error(f"Error adding event: {e}")
 
 # Join an event
 def join_event(event_key):
     try:
-        event_data = events_ref.child(event_key).get()
+        event_data = get_events_ref().child(event_key).get()
         if event_data and event_data["participants"] < event_data["max_participants"]:
             event_data["participants"] += 1
-            events_ref.child(event_key).update({"participants": event_data["participants"]})
-            user_joined_ref.push(event_key)
+            get_events_ref().child(event_key).update({"participants": event_data["participants"]})
+            get_user_joined_ref().push(event_key)
     except Exception as e:
         st.error(f"Error joining event: {e}")
 
 # Leave an event
 def leave_event(event_key):
     try:
-        event_data = events_ref.child(event_key).get()
+        event_data = get_events_ref().child(event_key).get()
         if event_data:
             event_data["participants"] -= 1
-            events_ref.child(event_key).update({"participants": event_data["participants"]})
+            get_events_ref().child(event_key).update({"participants": event_data["participants"]})
             joined_events = fetch_joined_events()
             for joined_key, joined_event_key in joined_events.items():
                 if joined_event_key == event_key:
-                    user_joined_ref.child(joined_key).delete()
+                    get_user_joined_ref().child(joined_key).delete()
                     break
     except Exception as e:
         st.error(f"Error leaving event: {e}")
@@ -148,13 +134,9 @@ st.header("Connect with fellows around you!")
 st.subheader("Add Your Name")
 name_input = st.text_input("Enter your name")
 if st.button("Submit"):
-    if name_input:
-        save_name(name_input)
-        st.success(f"Name '{name_input}' saved!")
-    else:
-        st.error("Please enter a valid name.")
+    save_name(name_input)
+    st.success(f"Name '{name_input}' saved!")
 
-# Saved names
 st.subheader("Saved Names")
 saved_names = fetch_names()
 for name_key, name in saved_names.items():
@@ -177,7 +159,7 @@ if "leave_event" in params:
     leave_event(params["leave_event"][0])
     st.experimental_set_query_params()
 
-# Display map with events
+# Display map
 map_ = render_map(events, joined_events, search_query)
 st_folium(map_, width=700)
 
