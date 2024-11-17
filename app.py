@@ -17,7 +17,7 @@ if not os.path.exists(service_account_path):
 else:
     try:
         # Initialize Firebase Admin with the service account key
-        cred = credentials.Certificate(service_account_path)
+        cred = credentials.Certificate(serviceAccountKey.json)
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://community-bridger-default-rtdb.europe-west1.firebasedatabase.app/'
         })
