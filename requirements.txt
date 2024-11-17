@@ -4,7 +4,7 @@ streamlit-folium
 pandas
 geopy
 matplotlib
-firebase_admin
+firebase-admin
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
