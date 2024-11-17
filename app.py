@@ -9,15 +9,15 @@ from datetime import datetime
 import google.auth.exceptions
 
 # Path to the service account key
-serviceAccountKey.json = "serviceAccountKey.json"
+service_account_path = "serviceAccountKey.json"
 
 # Initialize Firebase Admin SDK with error handling
-if not os.path.exists(sserviceAccountKey.json):
+if not os.path.exists(service_account_path):
     st.error("Firebase service account key not found. Please upload the key file.")
 else:
     try:
         # Initialize Firebase Admin with the service account key
-        cred = credentials.Certificate(serviceAccountKey.json)
+        cred = credentials.Certificate(service_account_path)
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://community-bridger-default-rtdb.europe-west1.firebasedatabase.app/'
         })
