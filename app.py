@@ -1,19 +1,43 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
-from firebase_admin import credentials, firestore, initialize_app
 import requests
 from datetime import datetime
 import random
 
-# Firebase Initialization
-cred = credentials.Certificate("1d46963c16c1c5f29e038998d8ab3982a7a2bd49")
-initialize_app(cred)
-db = firestore.client()
-events_ref = db.collection("events")
+# Initialize data
+events = [
+    {
+        "name": "Football Match",
+        "organizer": "John Doe",
+        "location": [47.4239, 9.3748],
+        "date": "2024-11-20",
+        "time": "15:00",
+        "description": "Join us for a friendly football match!",
+        "participants": 15,
+        "max_participants": 20,
+        "event_type": "outdoor",
+        "cancellation_prob": 30,
+        "weather": {"forecast": "Sunny 🌞", "temp": 20}
+    },
+    {
+        "name": "Study Group",
+        "organizer": "Jane Smith",
+        "location": [47.4245, 9.3769],
+        "date": "2024-11-22",
+        "time": "10:00",
+        "description": "Group study session for exams.",
+        "participants": 8,
+        "max_participants": 10,
+        "event_type": "indoor",
+        "cancellation_prob": 5,
+        "weather": {"forecast": "Cloudy ☁️", "temp": 18}
+    }
+]
+
+user_enrolled_events = []
 
 # Geocoding function using OpenCage Geocoder API
-'''
 def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
     url = f"https://api.opencagedata.com/geocode/v1/json?q={address}&key={api_key}"
     response = requests.get(url)
@@ -23,32 +47,15 @@ def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
             coordinates = results[0]['geometry']
             return [coordinates['lat'], coordinates['lng']]
     return None
-'''
-
-# Fetch events from Firestore
-'''
-def fetch_events():
-    docs = events_ref.stream()
-    return [doc.to_dict() for doc in docs]
-
-# Add event to Firestore
-def add_event_to_firestore(event):
-    events_ref.add(event)
-
-# Update participants in Firestore
-def update_event_participants(event_id, participants):
-    event_doc = events_ref.document(event_id)
-    event_doc.update({"participants": participants})
 
 # Render map with events
 def render_map(search_query=""):
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
-    events = fetch_events()
     filtered_events = [
         event for event in events
         if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower()
     ]
-    for event in filtered_events:
+    for idx, event in enumerate(filtered_events):
         participants_ratio = event["participants"] / event["max_participants"]
         participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
                           f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
@@ -56,6 +63,10 @@ def render_map(search_query=""):
         cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
                                 f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
                                 f'</div>'
+        if event in user_enrolled_events:
+            action_button = f'<button onclick="window.location.href=\'?leave_event={idx}\'">Leave Event</button>'
+        else:
+            action_button = f'<button onclick="window.location.href=\'?join_event={idx}\'">Join Event</button>'
         popup_content = f"""
         <div style="font-family:Arial; width:250px;">
             <h4>{event['name']}</h4>
@@ -68,6 +79,7 @@ def render_map(search_query=""):
             <p>{event['participants']} / {event['max_participants']}</p>
             <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
             {cancellation_prob_bar}
+            {action_button}
         </div>
         """
         folium.Marker(
@@ -79,9 +91,27 @@ def render_map(search_query=""):
     return base_map
 
 # Streamlit layout
-st.title("JoinMy")
+st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
 search_query = st.text_input("Search events", "")
+
+# Join/Leave Event Handling
+params = st.experimental_get_query_params()
+if "join_event" in params:
+    event_idx = int(params["join_event"][0])
+    event = events[event_idx]
+    if event not in user_enrolled_events and event["participants"] < event["max_participants"]:
+        event["participants"] += 1
+        user_enrolled_events.append(event)
+    st.experimental_set_query_params()
+
+if "leave_event" in params:
+    event_idx = int(params["leave_event"][0])
+    event = events[event_idx]
+    if event in user_enrolled_events:
+        event["participants"] -= 1
+        user_enrolled_events.remove(event)
+    st.experimental_set_query_params()
 
 # Display Map
 map_ = render_map(search_query=search_query)
@@ -116,11 +146,18 @@ with st.form("add_event_form"):
                     "cancellation_prob": random.randint(5, 30),
                     "weather": {"forecast": "Partly Cloudy ⛅", "temp": random.randint(15, 25)}
                 }
-                add_event_to_firestore(new_event)
+                events.append(new_event)
                 st.success(f"Event '{name}' added successfully!")
                 st.experimental_rerun()
             else:
                 st.error("Could not find location. Please try again.")
         else:
             st.error("Address is required.")
-'''
+
+# User's Joined Events
+st.subheader("Your Joined Events")
+if user_enrolled_events:
+    for event in user_enrolled_events:
+        st.write(f"- {event['name']} on {event['date']} at {event['time']}")
+else:
+    st.write("You have not joined any events yet.")
