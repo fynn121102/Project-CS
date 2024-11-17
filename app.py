@@ -9,10 +9,10 @@ from datetime import datetime
 import google.auth.exceptions
 
 # Path to the service account key
-service_account_path = "serviceAccountKey.json"
+serviceAccountKey.json = "serviceAccountKey.json"
 
 # Initialize Firebase Admin SDK with error handling
-if not os.path.exists(service_account_path):
+if not os.path.exists(sserviceAccountKey.json):
     st.error("Firebase service account key not found. Please upload the key file.")
 else:
     try:
