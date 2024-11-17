@@ -16,11 +16,15 @@ if not os.path.exists(service_account_path):
     st.error("Firebase service account key not found. Please upload the key file.")
 else:
     try:
-        # Initialize Firebase Admin with the service account key
-        cred = credentials.Certificate(service_account_path)
-        firebase_admin.initialize_app(cred, {
-            'databaseURL': 'https://community-bridger-default-rtdb.europe-west1.firebasedatabase.app/'
-        })
+        # Check if Firebase app is already initialized
+        if not firebase_admin._apps:
+            # Initialize Firebase Admin with the service account key
+            cred = credentials.Certificate(service_account_path)
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': 'https://community-bridger-default-rtdb.europe-west1.firebasedatabase.app/'
+            })
+        else:
+            print("Firebase is already initialized.")
     except google.auth.exceptions.RefreshError as e:
         st.error(f"Refresh error: {e}")
         raise
