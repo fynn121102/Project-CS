@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Initialize Firebase
 if not firebase_admin._apps:
-    cred = credentials.Certificate("50b143acdfe6aa3220495d69e2ebab5a25552c2b")
+    cred = credentials.Certificate("serviceAccountKey.json")
     firebase_admin.initialize_app(cred, {
         'databaseURL': 'https://community-bridger-default-rtdb.europe-west1.firebasedatabase.app/'  # Replace with your Firebase DB URL
     })
