@@ -21,7 +21,7 @@ else:
             # Initialize Firebase Admin with the service account key
             cred = credentials.Certificate(service_account_path)
             firebase_admin.initialize_app(cred, {
-                'databaseURL': 'https://community-bridger.firebaseio.com/'
+                'databaseURL': 'https://community-bridger-default-rtdb.europe-west1.firebasedatabase.app/'
             })
         else:
             print("Firebase is already initialized.")
