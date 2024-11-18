@@ -124,6 +124,19 @@ events = [
         "cancellation_prob": 0,
         "weather": {"forecast": "Cloudy ☁️", "temp": 7}
     },
+      {
+        "name": "Computer Science Bootcamp",
+        "organizer": "Mark Zuckerberg",
+        "location": [47.4232, 9.3750],
+        "date": "2024-12-05",
+        "time": "10:00",
+        "description": "Explore the world of coding!",
+        "participants": 9,
+        "max_participants": 10,
+        "event_type": "indoor",
+        "cancellation_prob": 1,
+        "weather": {"forecast": "Cloudy ☁️", "temp": 3}
+    },
     {
         "name": "Photography Walk",
         "organizer": "Ansel Adams",
