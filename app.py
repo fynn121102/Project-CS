@@ -5,7 +5,7 @@ import requests
 from datetime import datetime
 import random
 
-# Initialize data
+# Hardcode data
 events = [
     {
         "name": "Football Match",
