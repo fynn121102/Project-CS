@@ -5,11 +5,11 @@ import requests
 from datetime import datetime
 import random
 
-# Initialize data
+# hardcode data
 events = [
     {
         "name": "Football Match",
-        "organizer": "John Doe",
+        "organizer": "Cristiano Ronaldo",
         "location": [47.4239, 9.3748],
         "date": "2024-11-20",
         "time": "15:00",
@@ -18,11 +18,11 @@ events = [
         "max_participants": 20,
         "event_type": "outdoor",
         "cancellation_prob": 30,
-        "weather": {"forecast": "Sunny 🌞", "temp": 12}
+        "weather": {"forecast": "Cloudy ☁️", "temp": 6}
     },
     {
         "name": "Study Group",
-        "organizer": "Jane Smith",
+        "organizer": "Bill Gates",
         "location": [47.4245, 9.3769],
         "date": "2024-11-22",
         "time": "10:00",
