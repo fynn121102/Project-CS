@@ -195,7 +195,7 @@ if user_id:
             if event:
                 event["participants"] += 1
                 update_participants(event_id, event["participants"])
-        st.experimental_set_query_params()
+        st.experimental_set_query_params()  # Refresh the page after joining
 
     if "leave_event" in params:
         event_id = int(params["leave_event"][0])
@@ -206,7 +206,7 @@ if user_id:
             if event:
                 event["participants"] -= 1
                 update_participants(event_id, event["participants"])
-        st.experimental_set_query_params()
+        st.experimental_set_query_params()  # Refresh the page after leaving
 
     # Search Bar
     search_query = st.text_input("Search events", "")
@@ -215,40 +215,21 @@ if user_id:
     map_ = render_map(events, user_enrolled_events, search_query=search_query)
     st_folium(map_, width=700)
 
-    # Display Joined Events
-    st.subheader("Your Joined Events")
-    if user_enrolled_events:
-        for event_id in user_enrolled_events:
-            event = next((event for event in events if event["id"] == event_id), None)
-            if event:
-                st.write(f"- {event['name']} on {event['date']} at {event['time']}")
-    else:
-        st.write("You have not joined any events yet.")
-
-    # Add a New Event
-    with st.form("add_event_form"):
-        st.subheader("Add a New Event")
-        name = st.text_input("Event Name")
-        organizer = st.text_input("Organizer")
-        date = st.date_input("Event Date")
-        time = st.time_input("Event Time")
-        description = st.text_area("Event Description")
-        max_participants = st.number_input("Max Participants", min_value=1)
-        event_type = st.selectbox("Event Type", ["Workshop", "Meetup", "Seminar", "Outdoor"])
-        cancellation_prob = st.slider("Cancellation Probability", 0, 100, 0)
-        weather_forecast = st.selectbox("Weather Forecast", ["Sunny", "Rainy", "Cloudy"])
-        weather_temp = st.slider("Weather Temperature", -10, 40, 20)
-
-        submit_button = st.form_submit_button("Add Event")
-        if submit_button:
-            new_event = {
-                "name": name, "organizer": organizer, "location": [47.4239, 9.3748], "date": str(date),
-                "time": str(time), "description": description, "participants": 0, "max_participants": max_participants,
-                "event_type": event_type, "cancellation_prob": cancellation_prob,
-                "weather": {"forecast": weather_forecast, "temp": weather_temp}
-            }
-            insert_event(new_event)
-            st.success("Event added successfully!")
+    # Display Events List
+    st.write("Upcoming Events:")
+    for event in events:
+        if event["id"] not in user_enrolled_events:
+            join_leave_button = st.button(f"Join {event['name']}", key=f"join_{event['id']}")
+            if join_leave_button:
+                enroll_user_in_event(user_id, event["id"])
+                update_participants(event["id"], event["participants"] + 1)
+                st.experimental_rerun()  # Refresh the page after joining
+        else:
+            leave_button = st.button(f"Leave {event['name']}", key=f"leave_{event['id']}")
+            if leave_button:
+                unenroll_user_from_event(user_id, event["id"])
+                update_participants(event["id"], event["participants"] - 1)
+                st.experimental_rerun()  # Refresh the page after leaving
 else:
     st.write("Please enter a valid user ID to proceed.")
 
