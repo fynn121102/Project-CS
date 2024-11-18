@@ -139,8 +139,6 @@ user_enrolled_events = []
 
 # Handle Join/Leave Events
 params = st.experimental_get_query_params()
-
-# Join event logic
 if "join_event" in params:
     event_id = int(params["join_event"][0])
     for event in events:
@@ -150,7 +148,6 @@ if "join_event" in params:
             update_participants(event_id, event["participants"])
     st.experimental_set_query_params()
 
-# Leave event logic
 if "leave_event" in params:
     event_id = int(params["leave_event"][0])
     for event in events:
@@ -201,7 +198,7 @@ with st.form("add_event_form"):
             try:
                 insert_event(new_event)
                 st.success(f"Event '{name}' added successfully!")
-                st.rerun()  # Trigger a rerun to update the UI
+                st.rerun()  # Updated method
             except Exception as e:
                 st.error(f"Error adding event: {e}")
         else:
