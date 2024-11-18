@@ -137,6 +137,19 @@ events = [
         "cancellation_prob": 1,
         "weather": {"forecast": "Cloudy ☁️", "temp": 3}
     },
+       {
+        "name": "Houseparty",
+        "organizer": "Fynn Hirrlinger",
+        "location": [47.4333, 9.3786],
+        "date": "2024-12-05",
+        "time": "10:00",
+        "description": "Please bring snacks and don't set anything on fire.",
+        "participants": 42,
+        "max_participants": 50,
+        "event_type": "indoor",
+        "cancellation_prob": 5,
+        "weather": {"forecast": "Cloudy ☁️", "temp": 6}
+    },
     {
         "name": "Photography Walk",
         "organizer": "Ansel Adams",
