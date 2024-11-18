@@ -1,86 +1,43 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
-import sqlite3
 from datetime import datetime
 import random
 
-# Database setup
-def setup_database():
-    conn = sqlite3.connect("events.db")
-    cursor = conn.cursor()
-    # Create the events table if it doesn't exist
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY,
-            name TEXT,
-            organizer TEXT,
-            location_lat REAL,
-            location_lng REAL,
-            date TEXT,
-            time TEXT,
-            description TEXT,
-            participants INTEGER,
-            max_participants INTEGER,
-            event_type TEXT,
-            cancellation_prob INTEGER,
-            weather_forecast TEXT,
-            weather_temp INTEGER
-        )
-    ''')
-    conn.commit()
-    conn.close()
+# Initialize session state for joined events and events list
+if "joined_events" not in st.session_state:
+    st.session_state.joined_events = []  # Stores event ids that user joined
+    st.session_state.events = [
+        {"id": 1, "name": "Yoga Class", "organizer": "Alice", "location": [47.4239, 9.3748], "date": "2024-12-10", "time": "10:00 AM", "description": "Relax and stretch!", "participants": 5, "max_participants": 20, "event_type": "outdoor", "cancellation_prob": 5, "weather": {"forecast": "Sunny 🌞", "temp": 22}},
+        {"id": 2, "name": "Coding Workshop", "organizer": "Bob", "location": [47.4250, 9.3750], "date": "2024-12-15", "time": "1:00 PM", "description": "Learn to code!", "participants": 2, "max_participants": 20, "event_type": "indoor", "cancellation_prob": 10, "weather": {"forecast": "Cloudy ☁️", "temp": 18}},
+    ]
 
-# Insert an event into the database
-def insert_event(event):
-    conn = sqlite3.connect("events.db")
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO events (name, organizer, location_lat, location_lng, date, time, description,
-                            participants, max_participants, event_type, cancellation_prob, weather_forecast, weather_temp)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        event["name"], event["organizer"], event["location"][0], event["location"][1],
-        event["date"], event["time"], event["description"], event["participants"],
-        event["max_participants"], event["event_type"], event["cancellation_prob"],
-        event["weather"]["forecast"], event["weather"]["temp"]
-    ))
-    conn.commit()
-    conn.close()
-
-# Fetch all events from the database
-def fetch_events():
-    conn = sqlite3.connect("events.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM events")
-    rows = cursor.fetchall()
-    conn.close()
-
-    events = []
-    for row in rows:
-        events.append({
-            "id": row[0],
-            "name": row[1],
-            "organizer": row[2],
-            "location": [row[3], row[4]],
-            "date": row[5],
-            "time": row[6],
-            "description": row[7],
-            "participants": row[8],
-            "max_participants": row[9],
-            "event_type": row[10],
-            "cancellation_prob": row[11],
-            "weather": {"forecast": row[12], "temp": row[13]}
-        })
-    return events
-
-# Update participants count in the database
+# Update participants count in the in-memory events
 def update_participants(event_id, new_participants):
-    conn = sqlite3.connect("events.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE events SET participants = ? WHERE id = ?", (new_participants, event_id))
-    conn.commit()
-    conn.close()
+    for event in st.session_state.events:
+        if event["id"] == event_id:
+            event["participants"] = new_participants
+            break
+
+# Handle Join/Leave Events
+params = st.experimental_get_query_params()
+if "join_event" in params:
+    event_id = int(params["join_event"][0])
+    for event in st.session_state.events:
+        if event["id"] == event_id and event["participants"] < event["max_participants"]:
+            event["participants"] += 1
+            st.session_state.joined_events.append(event_id)
+            update_participants(event_id, event["participants"])
+    st.experimental_set_query_params()
+
+if "leave_event" in params:
+    event_id = int(params["leave_event"][0])
+    for event in st.session_state.events:
+        if event["id"] == event_id:
+            event["participants"] -= 1
+            st.session_state.joined_events.remove(event_id)
+            update_participants(event_id, event["participants"])
+    st.experimental_set_query_params()
 
 # Render map with events
 def render_map(events, user_enrolled_events, search_query=""):
@@ -93,11 +50,8 @@ def render_map(events, user_enrolled_events, search_query=""):
         participants_ratio = event["participants"] / event["max_participants"]
         participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
                           f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
-                          f'</div>'
-        cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
-                                f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
-                                f'</div>'
-        if event in user_enrolled_events:
+                          f'</div>'  
+        if event["id"] in user_enrolled_events:
             action_button = f'<button onclick="window.location.href=\'?leave_event={event["id"]}\'">Leave Event</button>'
         else:
             action_button = f'<button onclick="window.location.href=\'?join_event={event["id"]}\'">Join Event</button>'
@@ -107,12 +61,9 @@ def render_map(events, user_enrolled_events, search_query=""):
             <p><b>Organized by:</b> {event['organizer']}</p>
             <p><b>Date:</b> {event['date']} at {event['time']}</p>
             <p><b>Description:</b> {event['description']}</p>
-            <p><b>Weather:</b> {event['weather']['forecast']} ({event['weather']['temp']}°C)</p>
             <p><b>Participants:</b></p>
             {participant_bar}
             <p>{event['participants']} / {event['max_participants']}</p>
-            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
-            {cancellation_prob_bar}
             {action_button}
         </div>
         """
@@ -128,40 +79,11 @@ def render_map(events, user_enrolled_events, search_query=""):
 st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
 
-# Setup the database
-setup_database()
-
-# Fetch events
-events = fetch_events()
-
-# User's enrolled events (for this session only)
-user_enrolled_events = []
-
-# Handle Join/Leave Events
-params = st.experimental_get_query_params()
-if "join_event" in params:
-    event_id = int(params["join_event"][0])
-    for event in events:
-        if event["id"] == event_id and event["participants"] < event["max_participants"]:
-            event["participants"] += 1
-            user_enrolled_events.append(event)
-            update_participants(event_id, event["participants"])
-    st.experimental_set_query_params()
-
-if "leave_event" in params:
-    event_id = int(params["leave_event"][0])
-    for event in events:
-        if event["id"] == event_id:
-            event["participants"] -= 1
-            user_enrolled_events.remove(event)
-            update_participants(event_id, event["participants"])
-    st.experimental_set_query_params()
-
 # Search Bar
 search_query = st.text_input("Search events", "")
 
 # Display Map
-map_ = render_map(events, user_enrolled_events, search_query=search_query)
+map_ = render_map(st.session_state.events, st.session_state.joined_events, search_query=search_query)
 st_folium(map_, width=700)
 
 # Add a New Event
@@ -195,19 +117,18 @@ with st.form("add_event_form"):
                 "cancellation_prob": cancellation_prob,
                 "weather": {"forecast": weather_forecast, "temp": weather_temp}
             }
-            try:
-                insert_event(new_event)
-                st.success(f"Event '{name}' added successfully!")
-                st.rerun()  # Updated method
-            except Exception as e:
-                st.error(f"Error adding event: {e}")
+            st.session_state.events.append(new_event)  # Add to in-memory event list
+            st.session_state.joined_events.append(new_event["id"])  # Automatically join the new event
+            st.success(f"Event '{name}' added successfully!")
+            st.experimental_rerun()  # Reload app to reflect changes
         else:
             st.error("Please fill in all fields!")
 
 # Display Joined Events
 st.subheader("Your Joined Events")
-if user_enrolled_events:
-    for event in user_enrolled_events:
+if st.session_state.joined_events:
+    for event_id in st.session_state.joined_events:
+        event = next(event for event in st.session_state.events if event["id"] == event_id)
         st.write(f"- {event['name']} on {event['date']} at {event['time']}")
 else:
     st.write("You have not joined any events yet.")
