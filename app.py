@@ -1,43 +1,154 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
+import sqlite3
 from datetime import datetime
 import random
 
-# Initialize session state for joined events and events list
-if "joined_events" not in st.session_state:
-    st.session_state.joined_events = []  # Stores event ids that user joined
-    st.session_state.events = [
-        {"id": 1, "name": "Yoga Class", "organizer": "Alice", "location": [47.4239, 9.3748], "date": "2024-12-10", "time": "10:00 AM", "description": "Relax and stretch!", "participants": 5, "max_participants": 20, "event_type": "outdoor", "cancellation_prob": 5, "weather": {"forecast": "Sunny 🌞", "temp": 22}},
-        {"id": 2, "name": "Coding Workshop", "organizer": "Bob", "location": [47.4250, 9.3750], "date": "2024-12-15", "time": "1:00 PM", "description": "Learn to code!", "participants": 2, "max_participants": 20, "event_type": "indoor", "cancellation_prob": 10, "weather": {"forecast": "Cloudy ☁️", "temp": 18}},
-    ]
+# Database setup
+def setup_database():
+    conn = sqlite3.connect("events.db")
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            organizer TEXT,
+            location_lat REAL,
+            location_lng REAL,
+            date TEXT,
+            time TEXT,
+            description TEXT,
+            participants INTEGER,
+            max_participants INTEGER,
+            event_type TEXT,
+            cancellation_prob INTEGER,
+            weather_forecast TEXT,
+            weather_temp INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-# Update participants count in the in-memory events
+# Insert event into the database
+def insert_event(event):
+    conn = sqlite3.connect("events.db")
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO events (name, organizer, location_lat, location_lng, date, time, description, 
+                            participants, max_participants, event_type, cancellation_prob, 
+                            weather_forecast, weather_temp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        event["name"], event["organizer"], event["location"][0], event["location"][1],
+        event["date"], event["time"], event["description"], event["participants"],
+        event["max_participants"], event["event_type"], event["cancellation_prob"],
+        event["weather"]["forecast"], event["weather"]["temp"]
+    ))
+    conn.commit()
+    conn.close()
+
+# Fetch all events from the database
+def fetch_events():
+    conn = sqlite3.connect("events.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM events")
+    rows = cursor.fetchall()
+    conn.close()
+
+    events = []
+    for row in rows:
+        events.append({
+            "id": row[0],
+            "name": row[1],
+            "organizer": row[2],
+            "location": [row[3], row[4]],
+            "date": row[5],
+            "time": row[6],
+            "description": row[7],
+            "participants": row[8],
+            "max_participants": row[9],
+            "event_type": row[10],
+            "cancellation_prob": row[11],
+            "weather": {"forecast": row[12], "temp": row[13]}
+        })
+    return events
+
+# Update participants count in the database
 def update_participants(event_id, new_participants):
-    for event in st.session_state.events:
-        if event["id"] == event_id:
-            event["participants"] = new_participants
-            break
+    conn = sqlite3.connect("events.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE events SET participants = ? WHERE id = ?", (new_participants, event_id))
+    conn.commit()
+    conn.close()
+
+# App setup
+st.title("Community-Bridger")
+st.header("Connect with fellows around you!")
+
+# Setup the database
+setup_database()
+
+# Fetch events
+events = fetch_events()
+
+# User's enrolled events (for this session only)
+user_enrolled_events = []
 
 # Handle Join/Leave Events
 params = st.experimental_get_query_params()
 if "join_event" in params:
     event_id = int(params["join_event"][0])
-    for event in st.session_state.events:
+    for event in events:
         if event["id"] == event_id and event["participants"] < event["max_participants"]:
             event["participants"] += 1
-            st.session_state.joined_events.append(event_id)
+            user_enrolled_events.append(event["id"])
             update_participants(event_id, event["participants"])
     st.experimental_set_query_params()
 
 if "leave_event" in params:
     event_id = int(params["leave_event"][0])
-    for event in st.session_state.events:
+    for event in events:
         if event["id"] == event_id:
             event["participants"] -= 1
-            st.session_state.joined_events.remove(event_id)
+            user_enrolled_events.remove(event["id"])
             update_participants(event_id, event["participants"])
     st.experimental_set_query_params()
+
+# Add a New Event
+with st.form("add_event_form"):
+    st.subheader("Add a New Event")
+    name = st.text_input("Event Name")
+    organizer = st.text_input("Organizer Name")
+    description = st.text_area("Event Description")
+    date = st.date_input("Event Date", value=datetime.now())
+    time = st.time_input("Event Time", value=datetime.now().time())
+    max_participants = st.number_input("Max Participants", min_value=1, step=1)
+    event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
+    location_lat = st.number_input("Latitude", format="%.6f")
+    location_lng = st.number_input("Longitude", format="%.6f")
+    cancellation_prob = random.randint(5, 30)
+    weather_forecast = random.choice(["Sunny 🌞", "Cloudy ☁️", "Partly Cloudy ⛅"])
+    weather_temp = random.randint(5, 20)
+
+    if st.form_submit_button("Add Event"):
+        if name and organizer and description and location_lat and location_lng:
+            new_event = {
+                "name": name,
+                "organizer": organizer,
+                "location": [location_lat, location_lng],
+                "date": date.strftime("%Y-%m-%d"),
+                "time": time.strftime("%H:%M"),
+                "description": description,
+                "participants": 0,
+                "max_participants": max_participants,
+                "event_type": event_type,
+                "cancellation_prob": cancellation_prob,
+                "weather": {"forecast": weather_forecast, "temp": weather_temp}
+            }
+            insert_event(new_event)  # Add to SQLite database
+            st.success(f"Event '{name}' added successfully!")
+            st.experimental_rerun()  # Reload app to reflect changes
 
 # Render map with events
 def render_map(events, user_enrolled_events, search_query=""):
@@ -75,61 +186,8 @@ def render_map(events, user_enrolled_events, search_query=""):
         ).add_to(base_map)
     return base_map
 
-# App setup
-st.title("Community-Bridger")
-st.header("Connect with fellows around you!")
-
-# Search Bar
-search_query = st.text_input("Search events", "")
-
-# Display Map
-map_ = render_map(st.session_state.events, st.session_state.joined_events, search_query=search_query)
+# Display map
+map_ = render_map(events, user_enrolled_events)
 st_folium(map_, width=700)
 
-# Add a New Event
-with st.form("add_event_form"):
-    st.subheader("Add a New Event")
-    name = st.text_input("Event Name")
-    organizer = st.text_input("Organizer Name")
-    description = st.text_area("Event Description")
-    date = st.date_input("Event Date", value=datetime.now())
-    time = st.time_input("Event Time", value=datetime.now().time())
-    max_participants = st.number_input("Max Participants", min_value=1, step=1)
-    event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
-    location_lat = st.number_input("Latitude", format="%.6f")
-    location_lng = st.number_input("Longitude", format="%.6f")
-    cancellation_prob = random.randint(5, 30)
-    weather_forecast = random.choice(["Sunny 🌞", "Cloudy ☁️", "Partly Cloudy ⛅"])
-    weather_temp = random.randint(5, 20)
-
-    if st.form_submit_button("Add Event"):
-        if name and organizer and description and location_lat and location_lng:
-            new_event = {
-                "name": name,
-                "organizer": organizer,
-                "location": [location_lat, location_lng],
-                "date": date.strftime("%Y-%m-%d"),
-                "time": time.strftime("%H:%M"),
-                "description": description,
-                "participants": 0,
-                "max_participants": max_participants,
-                "event_type": event_type,
-                "cancellation_prob": cancellation_prob,
-                "weather": {"forecast": weather_forecast, "temp": weather_temp}
-            }
-            st.session_state.events.append(new_event)  # Add to in-memory event list
-            st.session_state.joined_events.append(new_event["id"])  # Automatically join the new event
-            st.success(f"Event '{name}' added successfully!")
-            st.experimental_rerun()  # Reload app to reflect changes
-        else:
-            st.error("Please fill in all fields!")
-
-# Display Joined Events
-st.subheader("Your Joined Events")
-if st.session_state.joined_events:
-    for event_id in st.session_state.joined_events:
-        event = next(event for event in st.session_state.events if event["id"] == event_id)
-        st.write(f"- {event['name']} on {event['date']} at {event['time']}")
-else:
-    st.write("You have not joined any events yet.")
 
