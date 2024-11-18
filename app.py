@@ -1,6 +1,6 @@
 import streamlit as st
 import firebase_admin
-from firebase_admin import credentials, db
+from firebase_admin import credentials, db, messaging
 import folium
 from streamlit_folium import st_folium
 import requests
@@ -9,47 +9,42 @@ import random
 
 # Initialize Firebase
 if not firebase_admin._apps:
-    cred = credentials.Certificate("join-my-firebase-adminsdk-r2poa-d1463d331f.json")  # Use the uploaded service key
+    cred = credentials.Certificate("serviceAccountKey.json")  # Use the uploaded service key
     firebase_admin.initialize_app(cred, {
-        'databaseURL': 'https://console.firebase.google.com/project/join-my/database/join-my-default-rtdb/data/~2F?fb_gclid=Cj0KCQiAouG5BhDBARIsAOc08RSkfEvSB4DqIbUON4PJUzZnnotd03Bqiq57vMeJx8WR9jQx7PW_DVQaAu9bEALw_wcB'
+        'databaseURL': 'https://community-bridger-default-rtdb.firebaseio.com/'
     })
 
 # Firebase database references
 events_ref = db.reference("events")
 user_joined_ref = db.reference("user_joined")
 names_ref = db.reference("names")
+tokens_ref = db.reference("tokens")  # To store FCM tokens
 
 # Helper functions
 def fetch_events():
-    """Fetch all events from Firebase."""
     return events_ref.get() or {}
 
 def fetch_joined_events():
-    """Fetch all events the user has joined."""
     return user_joined_ref.get() or {}
 
 def save_name(name):
-    """Save a name to Firebase."""
     names_ref.push(name)
 
 def fetch_names():
-    """Fetch all saved names."""
     return names_ref.get() or {}
 
 def add_event_to_firebase(event_data):
-    """Add a new event to Firebase."""
     events_ref.push(event_data)
 
 def join_event(event_key):
-    """Join an event."""
     event_data = events_ref.child(event_key).get()
     if event_data and event_data["participants"] < event_data["max_participants"]:
         event_data["participants"] += 1
         events_ref.child(event_key).update({"participants": event_data["participants"]})
         user_joined_ref.push(event_key)
+        send_fcm_message(f"Someone joined your event: {event_data['name']}")
 
 def leave_event(event_key):
-    """Leave an event."""
     event_data = events_ref.child(event_key).get()
     if event_data:
         event_data["participants"] -= 1
@@ -59,9 +54,9 @@ def leave_event(event_key):
             if joined_event_key == event_key:
                 user_joined_ref.child(joined_key).delete()
                 break
+        send_fcm_message(f"Someone left your event: {event_data['name']}")
 
 def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
-    """Geocode an address to latitude/longitude using OpenCage API."""
     url = f"https://api.opencagedata.com/geocode/v1/json?q={address}&key={api_key}"
     response = requests.get(url)
     if response.status_code == 200:
@@ -72,7 +67,6 @@ def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
     return None
 
 def render_map(events, joined_events, search_query=""):
-    """Render map with events."""
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
     for event_key, event in events.items():
         if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower():
@@ -110,9 +104,31 @@ def render_map(events, joined_events, search_query=""):
             ).add_to(base_map)
     return base_map
 
+def send_fcm_message(message):
+    """Send an FCM notification."""
+    tokens = tokens_ref.get() or []
+    if not tokens:
+        return
+    message = messaging.MulticastMessage(
+        notification=messaging.Notification(
+            title="Community Bridger Update",
+            body=message,
+        ),
+        tokens=tokens
+    )
+    response = messaging.send_multicast(message)
+    print(f"FCM: Sent {response.success_count} messages, {response.failure_count} failed.")
+
 # Streamlit app
 st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
+
+# FCM Token Input (for testing/demo purposes)
+st.subheader("Register Device for Notifications")
+token_input = st.text_input("Enter FCM Token")
+if st.button("Register Token"):
+    tokens_ref.push(token_input)
+    st.success("Token registered!")
 
 # Name input
 st.subheader("Add Your Name")
@@ -179,14 +195,5 @@ with st.form("add_event_form"):
                 "weather": {"forecast": weather_forecast, "temp": weather_temp}
             }
             add_event_to_firebase(event_data)
-            st.success(f"Event '{name}' added successfully!")
-            st.experimental_rerun()
-        else:
-            st.error("Could not find location. Please try again.")
-
-# Display joined events
-st.subheader("Your Joined Events")
-for joined_key, event_key in joined_events.items():
-    event = events.get(event_key, {})
-    if event:
-        st.write(f"- {event['name']} on {event['date']} at {event['time']}")
+            send_fcm_message(f"New event added: {name}")
+            st.success(f"Event '{name}' added
