@@ -1,81 +1,84 @@
 import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, auth, db
 import folium
 from streamlit_folium import st_folium
-import random
+import requests
 from datetime import datetime
+import random
 
-# Initialize Firebase
-if not firebase_admin._apps:
-    cred = credentials.Certificate("serviceAccountKey.json")
-    firebase_admin.initialize_app(cred, {
-        'databaseURL': 'https://console.firebase.google.com/project/join-my/database/join-my-default-rtdb/data/~2F?fb_gclid=Cj0KCQiAouG5BhDBARIsAOc08RSkfEvSB4DqIbUON4PJUzZnnotd03Bqiq57vMeJx8WR9jQx7PW_DVQaAu9bEALw_wcB'
-    })
+# Initialize data
+events = [
+    {
+        "name": "Football Match",
+        "organizer": "John Doe",
+        "location": [47.4239, 9.3748],
+        "date": "2024-11-20",
+        "time": "15:00",
+        "description": "Join us for a friendly football match!",
+        "participants": 15,
+        "max_participants": 20,
+        "event_type": "outdoor",
+        "cancellation_prob": 30,
+        "weather": {"forecast": "Sunny 🌞", "temp": 12}
+    },
+    {
+        "name": "Study Group",
+        "organizer": "Jane Smith",
+        "location": [47.4245, 9.3769],
+        "date": "2024-11-22",
+        "time": "10:00",
+        "description": "Group study session for exams.",
+        "participants": 8,
+        "max_participants": 10,
+        "event_type": "indoor",
+        "cancellation_prob": 5,
+        "weather": {"forecast": "Cloudy ☁️", "temp": 7}
+    }
+]
 
-# Firebase database references
-events_ref = db.reference("events")
-user_joined_ref = db.reference("user_joined")
+user_enrolled_events = []
 
-# Initialize user session state
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-if "user_email" not in st.session_state:
-    st.session_state["user_email"] = None
+# Geocoding function using OpenCage Geocoder API
+def geocode_address(address, api_key="YOUR_OPENCAGE_API_KEY"):
+    url = f"https://api.opencagedata.com/geocode/v1/json?q={address}&key={api_key}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        results = response.json().get('results', [])
+        if results:
+            coordinates = results[0]['geometry']
+            return [coordinates['lat'], coordinates['lng']]
+    return None
 
-# Helper functions
-def register_user(email, password):
-    """Register a new user."""
-    try:
-        user = auth.create_user(email=email, password=password)
-        st.success(f"User '{email}' registered successfully!")
-        return user
-    except firebase_admin._auth_utils.EmailAlreadyExistsError:
-        st.error("Email already exists. Please log in.")
-    except Exception as e:
-        st.error(f"Error: {e}")
-
-def login_user(email, password):
-    """Log in an existing user."""
-    try:
-        user = auth.get_user_by_email(email)
-        # Here, Firebase Admin SDK doesn't handle password verification.
-        # You'd typically implement a separate API endpoint with Firebase Authentication client SDK.
-        st.session_state["logged_in"] = True
-        st.session_state["user_email"] = email
-        st.success(f"Welcome back, {email}!")
-    except firebase_admin._auth_utils.UserNotFoundError:
-        st.error("User not found. Please register.")
-    except Exception as e:
-        st.error(f"Error: {e}")
-
-def logout_user():
-    """Log out the current user."""
-    st.session_state["logged_in"] = False
-    st.session_state["user_email"] = None
-    st.success("Logged out successfully!")
-
-def render_map(events, joined_events):
-    """Render map with events."""
+# Render map with events
+def render_map(search_query=""):
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
-    for event_key, event in events.items():
+    filtered_events = [
+        event for event in events
+        if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower()
+    ]
+    for idx, event in enumerate(filtered_events):
         participants_ratio = event["participants"] / event["max_participants"]
-        participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
+        participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
                           f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
                           f'</div>'
-        if event_key in joined_events.values():
-            action_button = f'<button onclick="window.location.href=\'?leave_event={event_key}\'">Leave Event</button>'
+        cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px; position: relative;">' \
+                                f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
+                                f'</div>'
+        if event in user_enrolled_events:
+            action_button = f'<button onclick="window.location.href=\'?leave_event={idx}\'">Leave Event</button>'
         else:
-            action_button = f'<button onclick="window.location.href=\'?join_event={event_key}\'">Join Event</button>'
+            action_button = f'<button onclick="window.location.href=\'?join_event={idx}\'">Join Event</button>'
         popup_content = f"""
         <div style="font-family:Arial; width:250px;">
             <h4>{event['name']}</h4>
             <p><b>Organized by:</b> {event['organizer']}</p>
             <p><b>Date:</b> {event['date']} at {event['time']}</p>
             <p><b>Description:</b> {event['description']}</p>
+            <p><b>Weather:</b> {event['weather']['forecast']} ({event['weather']['temp']}°C)</p>
             <p><b>Participants:</b></p>
             {participant_bar}
             <p>{event['participants']} / {event['max_participants']}</p>
+            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
+            {cancellation_prob_bar}
             {action_button}
         </div>
         """
@@ -87,59 +90,74 @@ def render_map(events, joined_events):
         ).add_to(base_map)
     return base_map
 
-# Streamlit app
+# Streamlit layout
 st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
+search_query = st.text_input("Search events", "")
 
-if not st.session_state["logged_in"]:
-    # Registration/Login Form
-    auth_option = st.radio("Choose an option", ["Log In", "Register"])
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-    
-    if auth_option == "Register" and st.button("Register"):
-        register_user(email, password)
-    
-    if auth_option == "Log In" and st.button("Log In"):
-        login_user(email, password)
+# Join/Leave Event Handling
+params = st.experimental_get_query_params()
+if "join_event" in params:
+    event_idx = int(params["join_event"][0])
+    event = events[event_idx]
+    if event not in user_enrolled_events and event["participants"] < event["max_participants"]:
+        event["participants"] += 1
+        user_enrolled_events.append(event)
+    st.experimental_set_query_params()
+
+if "leave_event" in params:
+    event_idx = int(params["leave_event"][0])
+    event = events[event_idx]
+    if event in user_enrolled_events:
+        event["participants"] -= 1
+        user_enrolled_events.remove(event)
+    st.experimental_set_query_params()
+
+# Display Map
+map_ = render_map(search_query=search_query)
+st_data = st_folium(map_, width=700)
+
+# Add a New Event
+with st.form("add_event_form"):
+    st.subheader("Add a New Event")
+    name = st.text_input("Event Name")
+    organizer = st.text_input("Organizer Name")
+    description = st.text_area("Event Description")
+    date = st.date_input("Event Date", value=datetime.now())
+    time = st.time_input("Event Time", value=datetime.now().time())
+    max_participants = st.number_input("Max Participants", min_value=1, step=1)
+    event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
+    address = st.text_input("Event Address (Street and Number)")
+
+    if st.form_submit_button("Add Event"):
+        if address:
+            location = geocode_address(address)
+            if location:
+                new_event = {
+                    "name": name,
+                    "organizer": organizer,
+                    "location": location,
+                    "date": date.strftime("%Y-%m-%d"),
+                    "time": time.strftime("%H:%M"),
+                    "description": description,
+                    "participants": 0,
+                    "max_participants": max_participants,
+                    "event_type": event_type,
+                    "cancellation_prob": random.randint(5, 30),
+                    "weather": {"forecast": "Partly Cloudy ⛅", "temp": random.randint(15, 25)}
+                }
+                events.append(new_event)
+                st.success(f"Event '{name}' added successfully!")
+                st.experimental_rerun()
+            else:
+                st.error("Could not find location. Please try again.")
+        else:
+            st.error("Address is required.")
+
+# User's Joined Events
+st.subheader("Your Joined Events")
+if user_enrolled_events:
+    for event in user_enrolled_events:
+        st.write(f"- {event['name']} on {event['date']} at {event['time']}")
 else:
-    st.sidebar.subheader(f"Logged in as {st.session_state['user_email']}")
-    if st.sidebar.button("Log Out"):
-        logout_user()
-
-    # Event search
-    search_query = st.text_input("Search events", "")
-
-    # Fetch events
-    events = fetch_events()
-    joined_events = fetch_joined_events()
-
-    # Display map
-    map_ = render_map(events, joined_events)
-    st_folium(map_, width=700)
-
-    # Add a new event
-    with st.form("add_event_form"):
-        st.subheader("Add a New Event")
-        name = st.text_input("Event Name")
-        organizer = st.text_input("Organizer Name")
-        description = st.text_area("Event Description")
-        date = st.date_input("Event Date", value=datetime.now())
-        time = st.time_input("Event Time", value=datetime.now().time())
-        max_participants = st.number_input("Max Participants", min_value=1, step=1)
-        event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
-        location = [47.4239 + random.uniform(-0.01, 0.01), 9.3748 + random.uniform(-0.01, 0.01)]  # Random location for demo
-        if st.form_submit_button("Add Event"):
-            event_data = {
-                "name": name,
-                "organizer": organizer,
-                "location": location,
-                "date": date.strftime("%Y-%m-%d"),
-                "time": time.strftime("%H:%M"),
-                "description": description,
-                "participants": 0,
-                "max_participants": max_participants,
-                "event_type": event_type
-            }
-            add_event_to_firebase(event_data)
-            st.success(f"Event '{name}' added successfully!")
+    st.write("You have not joined any events yet.")
