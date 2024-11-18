@@ -9,9 +9,9 @@ import random
 
 # Initialize Firebase
 if not firebase_admin._apps:
-    cred = credentials.Certificate("serviceAccountKey.json")  # Use the uploaded service key
+    cred = credentials.Certificate("join-my-firebase-adminsdk-r2poa-d1463d331f.json")  # Use the uploaded service key
     firebase_admin.initialize_app(cred, {
-        'databaseURL': 'https://community-bridger-default-rtdb.firebaseio.com/'
+        'databaseURL': 'https://console.firebase.google.com/project/join-my/database/join-my-default-rtdb/data/~2F?fb_gclid=Cj0KCQiAouG5BhDBARIsAOc08RSkfEvSB4DqIbUON4PJUzZnnotd03Bqiq57vMeJx8WR9jQx7PW_DVQaAu9bEALw_wcB'
     })
 
 # Firebase database references
