@@ -252,3 +252,4 @@ if user_events:
 else:
     st.write("You have not joined any events yet.")
 
+
