@@ -20,7 +20,7 @@ events = [
         "cancellation_prob": 30,
         "weather": {"forecast": "Sunny 🌞", "temp": 12}
     },
-    {
+    {,
         "name": "Study Group",
         "organizer": "Jane Smith",
         "location": [47.4245, 9.3769],
