@@ -9,7 +9,7 @@ import random
 events = [
     {
         "name": "Football Match",
-        "organizer": "John Doe",
+        "organizer": "Cristiano Ronaldo",
         "location": [47.4239, 9.3748],
         "date": "2024-11-20",
         "time": "15:00",
@@ -22,11 +22,11 @@ events = [
     },
     {
         "name": "Study Group",
-        "organizer": "Jane Smith",
+        "organizer": "Bill Gates",
         "location": [47.4245, 9.3769],
         "date": "2024-11-22",
         "time": "10:00",
-        "description": "Group study session for exams.",
+        "description": "Group study session for computer science exams.",
         "participants": 8,
         "max_participants": 10,
         "event_type": "indoor",
@@ -35,7 +35,7 @@ events = [
     },
     {
         "name": "Yoga in the Park",
-        "organizer": "Anna Müller",
+        "organizer": "Pamela Reif",
         "location": [47.4215, 9.3740],
         "date": "2024-11-25",
         "time": "08:00",
@@ -61,7 +61,7 @@ events = [
     },
     {
         "name": "Painting Workshop",
-        "organizer": "Frida Kahlo",
+        "organizer": "Leonardo da Vinci",
         "location": [47.4250, 9.3730],
         "date": "2024-11-28",
         "time": "14:00",
@@ -87,7 +87,7 @@ events = [
     },
     {
         "name": "Hiking Trip",
-        "organizer": "John Doe",
+        "organizer": "Andre Schürrle",
         "location": [47.4200, 9.3775],
         "date": "2024-12-01",
         "time": "09:00",
@@ -100,7 +100,7 @@ events = [
     },
     {
         "name": "Book Club",
-        "organizer": "Jane Austen",
+        "organizer": "J.K. Rowling",
         "location": [47.4248, 9.3752],
         "date": "2024-12-03",
         "time": "16:00",
@@ -195,7 +195,7 @@ def render_map(search_query=""):
     return base_map
 
 # Streamlit layout
-st.title("Community-Bridger")
+st.title("JoinMy")
 st.header("Connect with fellows around you!")
 search_query = st.text_input("Search events", "")
 
