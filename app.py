@@ -9,9 +9,10 @@ import random
 def setup_database():
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
+    # Create the events table if it doesn't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             name TEXT,
             organizer TEXT,
             location_lat REAL,
@@ -30,14 +31,13 @@ def setup_database():
     conn.commit()
     conn.close()
 
-# Insert event into the database
+# Insert an event into the database
 def insert_event(event):
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO events (name, organizer, location_lat, location_lng, date, time, description, 
-                            participants, max_participants, event_type, cancellation_prob, 
-                            weather_forecast, weather_temp)
+        INSERT INTO events (name, organizer, location_lat, location_lng, date, time, description,
+                            participants, max_participants, event_type, cancellation_prob, weather_forecast, weather_temp)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         event["name"], event["organizer"], event["location"][0], event["location"][1],
@@ -82,6 +82,48 @@ def update_participants(event_id, new_participants):
     conn.commit()
     conn.close()
 
+# Render map with events
+def render_map(events, user_enrolled_events, search_query=""):
+    base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
+    filtered_events = [
+        event for event in events
+        if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower()
+    ]
+    for event in filtered_events:
+        participants_ratio = event["participants"] / event["max_participants"]
+        participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
+                          f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
+                          f'</div>'
+        cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
+                                f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
+                                f'</div>'
+        if event in user_enrolled_events:
+            action_button = f'<button onclick="window.location.href=\'?leave_event={event["id"]}\'">Leave Event</button>'
+        else:
+            action_button = f'<button onclick="window.location.href=\'?join_event={event["id"]}\'">Join Event</button>'
+        popup_content = f"""
+        <div style="font-family:Arial; width:250px;">
+            <h4>{event['name']}</h4>
+            <p><b>Organized by:</b> {event['organizer']}</p>
+            <p><b>Date:</b> {event['date']} at {event['time']}</p>
+            <p><b>Description:</b> {event['description']}</p>
+            <p><b>Weather:</b> {event['weather']['forecast']} ({event['weather']['temp']}°C)</p>
+            <p><b>Participants:</b></p>
+            {participant_bar}
+            <p>{event['participants']} / {event['max_participants']}</p>
+            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
+            {cancellation_prob_bar}
+            {action_button}
+        </div>
+        """
+        folium.Marker(
+            location=event["location"],
+            icon=folium.Icon(color="blue", icon="info-sign"),
+            popup=folium.Popup(popup_content, max_width=300),
+            tooltip=event["name"]
+        ).add_to(base_map)
+    return base_map
+
 # App setup
 st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
@@ -102,7 +144,7 @@ if "join_event" in params:
     for event in events:
         if event["id"] == event_id and event["participants"] < event["max_participants"]:
             event["participants"] += 1
-            user_enrolled_events.append(event["id"])
+            user_enrolled_events.append(event)
             update_participants(event_id, event["participants"])
     st.experimental_set_query_params()
 
@@ -111,9 +153,16 @@ if "leave_event" in params:
     for event in events:
         if event["id"] == event_id:
             event["participants"] -= 1
-            user_enrolled_events.remove(event["id"])
+            user_enrolled_events.remove(event)
             update_participants(event_id, event["participants"])
     st.experimental_set_query_params()
+
+# Search Bar
+search_query = st.text_input("Search events", "")
+
+# Display Map
+map_ = render_map(events, user_enrolled_events, search_query=search_query)
+st_folium(map_, width=700)
 
 # Add a New Event
 with st.form("add_event_form"):
@@ -146,48 +195,20 @@ with st.form("add_event_form"):
                 "cancellation_prob": cancellation_prob,
                 "weather": {"forecast": weather_forecast, "temp": weather_temp}
             }
-            insert_event(new_event)  # Add to SQLite database
-            st.success(f"Event '{name}' added successfully!")
-            st.experimental_rerun()  # Reload app to reflect changes
-
-# Render map with events
-def render_map(events, user_enrolled_events, search_query=""):
-    base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
-    filtered_events = [
-        event for event in events
-        if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower()
-    ]
-    for event in filtered_events:
-        participants_ratio = event["participants"] / event["max_participants"]
-        participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
-                          f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
-                          f'</div>'  
-        if event["id"] in user_enrolled_events:
-            action_button = f'<button onclick="window.location.href=\'?leave_event={event["id"]}\'">Leave Event</button>'
+            try:
+                insert_event(new_event)
+                st.success(f"Event '{name}' added successfully!")
+                st.rerun()  # Updated method
+            except Exception as e:
+                st.error(f"Error adding event: {e}")
         else:
-            action_button = f'<button onclick="window.location.href=\'?join_event={event["id"]}\'">Join Event</button>'
-        popup_content = f"""
-        <div style="font-family:Arial; width:250px;">
-            <h4>{event['name']}</h4>
-            <p><b>Organized by:</b> {event['organizer']}</p>
-            <p><b>Date:</b> {event['date']} at {event['time']}</p>
-            <p><b>Description:</b> {event['description']}</p>
-            <p><b>Participants:</b></p>
-            {participant_bar}
-            <p>{event['participants']} / {event['max_participants']}</p>
-            {action_button}
-        </div>
-        """
-        folium.Marker(
-            location=event["location"],
-            icon=folium.Icon(color="blue", icon="info-sign"),
-            popup=folium.Popup(popup_content, max_width=300),
-            tooltip=event["name"]
-        ).add_to(base_map)
-    return base_map
+            st.error("Please fill in all fields!")
 
-# Display map
-map_ = render_map(events, user_enrolled_events)
-st_folium(map_, width=700)
-
+# Display Joined Events
+st.subheader("Your Joined Events")
+if user_enrolled_events:
+    for event in user_enrolled_events:
+        st.write(f"- {event['name']} on {event['date']} at {event['time']}")
+else:
+    st.write("You have not joined any events yet.")
 
