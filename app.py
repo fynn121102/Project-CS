@@ -241,6 +241,11 @@ with st.form("add_event_form"):
         else:
             st.error("Please fill in all fields!")
 
+# Display all Events next to the map
+st.subheader("All Events")
+for event in events:
+    st.write(f"- {event['name']} | {event['time']} | Organized by {event['organizer']}")
+
 # Display Joined Events
 st.subheader("Your Joined Events")
 user_events = fetch_user_events(st.session_state.user_id)
