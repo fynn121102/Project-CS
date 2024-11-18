@@ -19,7 +19,7 @@ events = [
         "event_type": "outdoor",
         "cancellation_prob": 30,
         "weather": {"forecast": "Sunny 🌞", "temp": 12}
-    }
+    },
     {
         "name": "Study Group",
         "organizer": "Jane Smith",
@@ -32,7 +32,7 @@ events = [
         "event_type": "indoor",
         "cancellation_prob": 5,
         "weather": {"forecast": "Cloudy ☁️", "temp": 7}
-    }
+    },
     {
         "name": "Yoga in the Park",
         "organizer": "Anna Müller",
