@@ -181,22 +181,28 @@ with st.form("add_event_form"):
     weather_temp = random.randint(5, 20)
 
     if st.form_submit_button("Add Event"):
-        new_event = {
-            "name": name,
-            "organizer": organizer,
-            "location": [location_lat, location_lng],
-            "date": date.strftime("%Y-%m-%d"),
-            "time": time.strftime("%H:%M"),
-            "description": description,
-            "participants": 0,
-            "max_participants": max_participants,
-            "event_type": event_type,
-            "cancellation_prob": cancellation_prob,
-            "weather": {"forecast": weather_forecast, "temp": weather_temp}
-        }
-        insert_event(new_event)
-        st.success(f"Event '{name}' added successfully!")
-        st.experimental_rerun()
+        if name and organizer and description and location_lat and location_lng:
+            new_event = {
+                "name": name,
+                "organizer": organizer,
+                "location": [location_lat, location_lng],
+                "date": date.strftime("%Y-%m-%d"),
+                "time": time.strftime("%H:%M"),
+                "description": description,
+                "participants": 0,
+                "max_participants": max_participants,
+                "event_type": event_type,
+                "cancellation_prob": cancellation_prob,
+                "weather": {"forecast": weather_forecast, "temp": weather_temp}
+            }
+            try:
+                insert_event(new_event)
+                st.success(f"Event '{name}' added successfully!")
+                st.experimental_rerun()
+            except Exception as e:
+                st.error(f"Error adding event: {e}")
+        else:
+            st.error("Please fill in all fields!")
 
 # Display Joined Events
 st.subheader("Your Joined Events")
