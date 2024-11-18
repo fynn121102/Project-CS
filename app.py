@@ -5,8 +5,8 @@ import sqlite3
 from datetime import datetime
 import random
 
-# Database setup
-def setup_database():
+# Database setup for events
+def setup_events_database():
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
     # Create the events table if it doesn't exist
@@ -26,6 +26,21 @@ def setup_database():
             cancellation_prob INTEGER,
             weather_forecast TEXT,
             weather_temp INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Database setup for user event enrollment
+def setup_user_events_database():
+    conn = sqlite3.connect("user_events.db")
+    cursor = conn.cursor()
+    # Create table for users and their joined events
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_events (
+            user_id INTEGER PRIMARY KEY,
+            event_id INTEGER,
+            FOREIGN KEY (event_id) REFERENCES events(id)
         )
     ''')
     conn.commit()
@@ -74,7 +89,31 @@ def fetch_events():
         })
     return events
 
-# Update participants count in the database
+# Insert a user's event participation into the database
+def insert_user_event(user_id, event_id):
+    conn = sqlite3.connect("user_events.db")
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO user_events (user_id, event_id)
+        VALUES (?, ?)
+    ''', (user_id, event_id))
+    conn.commit()
+    conn.close()
+
+# Fetch a user's joined events
+def fetch_user_events(user_id):
+    conn = sqlite3.connect("user_events.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT event_id FROM user_events WHERE user_id = ?", (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    user_events = []
+    for row in rows:
+        user_events.append(row[0])  # Only the event IDs
+    return user_events
+
+# Update participants count in the events table
 def update_participants(event_id, new_participants):
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
@@ -125,26 +164,35 @@ def render_map(events, search_query=""):
 st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
 
-# Setup the database
-setup_database()
+# Setup the databases
+setup_events_database()
+setup_user_events_database()
 
 # Fetch events
 events = fetch_events()
 
-# Initialize session state for user's enrolled events if not already initialized
-if "user_enrolled_events" not in st.session_state:
-    st.session_state.user_enrolled_events = []
+# User session handling (simulating a user)
+if "user_id" not in st.session_state:
+    st.session_state.user_id = random.randint(1, 1000)  # Simulate a user ID
 
-# Handle Join/Leave Events
+# Handle Join Event
 params = st.experimental_get_query_params()
 if "join_event" in params:
     event_id = int(params["join_event"][0])
-    for event in events:
-        if event["id"] == event_id and event["participants"] < event["max_participants"]:
-            event["participants"] += 1
-            st.session_state.user_enrolled_events.append(event)  # Add the event to the user's list
-            update_participants(event_id, event["participants"])
-    st.experimental_set_query_params()  # Refresh query parameters
+    user_events = fetch_user_events(st.session_state.user_id)
+
+    if event_id not in user_events:
+        for event in events:
+            if event["id"] == event_id and event["participants"] < event["max_participants"]:
+                event["participants"] += 1
+                update_participants(event_id, event["participants"])
+                insert_user_event(st.session_state.user_id, event_id)  # Insert user-event relation
+                st.success(f"Joined event '{event['name']}' successfully!")
+                break
+    else:
+        st.warning("You have already joined this event.")
+    
+    st.experimental_set_query_params()  # Reset the query parameters (page refresh)
 
 # Search Bar
 search_query = st.text_input("Search events", "")
@@ -187,7 +235,7 @@ with st.form("add_event_form"):
             try:
                 insert_event(new_event)
                 st.success(f"Event '{name}' added successfully!")
-                st.rerun()  # Refresh the page
+                st.rerun()  # Reload the page to show updated events
             except Exception as e:
                 st.error(f"Error adding event: {e}")
         else:
@@ -195,8 +243,12 @@ with st.form("add_event_form"):
 
 # Display Joined Events
 st.subheader("Your Joined Events")
-if st.session_state.user_enrolled_events:
-    for event in st.session_state.user_enrolled_events:
-        st.write(f"- {event['name']} on {event['date']} at {event['time']}")
+user_events = fetch_user_events(st.session_state.user_id)
+if user_events:
+    for event_id in user_events:
+        event = next((e for e in events if e["id"] == event_id), None)
+        if event:
+            st.write(f"- {event['name']} on {event['date']} at {event['time']} (Organized by {event['organizer']})")
 else:
     st.write("You have not joined any events yet.")
+
