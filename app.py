@@ -91,7 +91,7 @@ def render_map(search_query=""):
     return base_map
 
 # Streamlit layout
-st.title("Community-Bridger")
+st.title("JoinMy")
 st.header("Connect with fellows around you!")
 search_query = st.text_input("Search events", "")
 
