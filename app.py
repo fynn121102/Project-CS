@@ -127,7 +127,7 @@ events = [
       {
         "name": "Computer Science Bootcamp",
         "organizer": "Mark Zuckerberg",
-        "location": [47.4232, 9.3750],
+        "location": [47.4232, 9.3758],
         "date": "2024-12-05",
         "time": "10:00",
         "description": "Explore the world of coding!",
