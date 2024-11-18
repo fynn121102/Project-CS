@@ -9,7 +9,6 @@ import random
 def setup_database():
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
-    
     # Create the events table if it doesn't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS events (
@@ -29,26 +28,12 @@ def setup_database():
             weather_temp INTEGER
         )
     ''')
-    
-    # Create the user_enrollments table if it doesn't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_enrollments (
-            user_id INTEGER,
-            event_id INTEGER,
-            PRIMARY KEY (user_id, event_id),
-            FOREIGN KEY (user_id) REFERENCES users(id),
-            FOREIGN KEY (event_id) REFERENCES events(id)
+            user_id TEXT,
+            event_id INTEGER
         )
     ''')
-
-    # Create a users table (for managing unique users)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL
-        )
-    ''')
-    
     conn.commit()
     conn.close()
 
@@ -95,36 +80,37 @@ def fetch_events():
         })
     return events
 
-# Fetch the events a user has joined
+# Update participants count in the database
+def update_participants(event_id, new_participants):
+    conn = sqlite3.connect("events.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE events SET participants = ? WHERE id = ?", (new_participants, event_id))
+    conn.commit()
+    conn.close()
+
+# Fetch user enrolled events
 def fetch_user_enrolled_events(user_id):
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
     cursor.execute("SELECT event_id FROM user_enrollments WHERE user_id = ?", (user_id,))
     rows = cursor.fetchall()
     conn.close()
+
     return [row[0] for row in rows]
 
 # Enroll a user in an event
 def enroll_user_in_event(user_id, event_id):
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO user_enrollments (user_id, event_id) VALUES (?, ?)", (user_id, event_id))
+    cursor.execute("INSERT INTO user_enrollments (user_id, event_id) VALUES (?, ?)", (user_id, event_id))
     conn.commit()
     conn.close()
 
-# Remove a user from an event
+# Unenroll a user from an event
 def unenroll_user_from_event(user_id, event_id):
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
     cursor.execute("DELETE FROM user_enrollments WHERE user_id = ? AND event_id = ?", (user_id, event_id))
-    conn.commit()
-    conn.close()
-
-# Update participants count in the database
-def update_participants(event_id, new_participants):
-    conn = sqlite3.connect("events.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE events SET participants = ? WHERE id = ?", (new_participants, event_id))
     conn.commit()
     conn.close()
 
@@ -180,18 +166,26 @@ setup_database()
 # Fetch events
 events = fetch_events()
 
-# Handle Join/Leave Events
-params = st.experimental_get_query_params()
+# User's enrolled events (for this session only)
+user_enrolled_events = []
 
-# Check if the user is logged in or provide a prompt for username
-user_id = st.text_input("Enter your username", value="user1")  # For simplicity, using a text input as user identifier
+# Handle user input (username/user_id)
+user_input = st.text_input("Enter your username", value="user1")
+
+# Check if the user input is a valid number (user_id)
+if user_input.isdigit():
+    user_id = int(user_input)
+else:
+    user_id = user_input  # Use the username as the user ID if not a number
+    st.error("Please enter a valid user ID (integer) or username.")
+
+# Proceed if the user_id is valid
 if user_id:
-    user_id = int(user_id)
-
-    # Fetch user's enrolled events
+    # Fetch enrolled events for the user
     user_enrolled_events = fetch_user_enrolled_events(user_id)
 
-    # Join event logic
+    # Handle Join/Leave Events
+    params = st.experimental_get_query_params()
     if "join_event" in params:
         event_id = int(params["join_event"][0])
         if event_id not in user_enrolled_events:
@@ -203,7 +197,6 @@ if user_id:
                 update_participants(event_id, event["participants"])
         st.experimental_set_query_params()
 
-    # Leave event logic
     if "leave_event" in params:
         event_id = int(params["leave_event"][0])
         if event_id in user_enrolled_events:
@@ -236,40 +229,26 @@ if user_id:
     with st.form("add_event_form"):
         st.subheader("Add a New Event")
         name = st.text_input("Event Name")
-        organizer = st.text_input("Organizer Name")
+        organizer = st.text_input("Organizer")
+        date = st.date_input("Event Date")
+        time = st.time_input("Event Time")
         description = st.text_area("Event Description")
-        date = st.date_input("Event Date", value=datetime.now())
-        time = st.time_input("Event Time", value=datetime.now().time())
-        max_participants = st.number_input("Max Participants", min_value=1, step=1)
-        event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
-        location_lat = st.number_input("Latitude", format="%.6f")
-        location_lng = st.number_input("Longitude", format="%.6f")
-        cancellation_prob = random.randint(5, 30)
-        weather_forecast = random.choice(["Sunny 🌞", "Cloudy ☁️", "Partly Cloudy ⛅"])
-        weather_temp = random.randint(5, 20)
+        max_participants = st.number_input("Max Participants", min_value=1)
+        event_type = st.selectbox("Event Type", ["Workshop", "Meetup", "Seminar", "Outdoor"])
+        cancellation_prob = st.slider("Cancellation Probability", 0, 100, 0)
+        weather_forecast = st.selectbox("Weather Forecast", ["Sunny", "Rainy", "Cloudy"])
+        weather_temp = st.slider("Weather Temperature", -10, 40, 20)
 
-        if st.form_submit_button("Add Event"):
-            if name and organizer and description and location_lat and location_lng:
-                new_event = {
-                    "name": name,
-                    "organizer": organizer,
-                    "location": [location_lat, location_lng],
-                    "date": date.strftime("%Y-%m-%d"),
-                    "time": time.strftime("%H:%M"),
-                    "description": description,
-                    "participants": 0,
-                    "max_participants": max_participants,
-                    "event_type": event_type,
-                    "cancellation_prob": cancellation_prob,
-                    "weather": {"forecast": weather_forecast, "temp": weather_temp}
-                }
-                try:
-                    insert_event(new_event)
-                    st.success(f"Event '{name}' added successfully!")
-                    st.experimental_rerun()
-                except Exception as e:
-                    st.error(f"Error adding event: {e}")
-            else:
-                st.error("Please fill in all fields!")
+        submit_button = st.form_submit_button("Add Event")
+        if submit_button:
+            new_event = {
+                "name": name, "organizer": organizer, "location": [47.4239, 9.3748], "date": str(date),
+                "time": str(time), "description": description, "participants": 0, "max_participants": max_participants,
+                "event_type": event_type, "cancellation_prob": cancellation_prob,
+                "weather": {"forecast": weather_forecast, "temp": weather_temp}
+            }
+            insert_event(new_event)
+            st.success("Event added successfully!")
 else:
-    st.write("Please enter a username to proceed.")
+    st.write("Please enter a valid user ID to proceed.")
+
