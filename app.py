@@ -198,7 +198,7 @@ with st.form("add_event_form"):
             try:
                 insert_event(new_event)
                 st.success(f"Event '{name}' added successfully!")
-                st.experimental_rerun()
+                st.rerun()  # Updated method
             except Exception as e:
                 st.error(f"Error adding event: {e}")
         else:
@@ -211,4 +211,3 @@ if user_enrolled_events:
         st.write(f"- {event['name']} on {event['date']} at {event['time']}")
 else:
     st.write("You have not joined any events yet.")
-
