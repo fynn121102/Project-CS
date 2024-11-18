@@ -201,50 +201,11 @@ search_query = st.text_input("Search events", "")
 map_ = render_map(events, search_query=search_query)
 st_folium(map_, width=700)
 
-# Add a New Event
-with st.form("add_event_form"):
-    st.subheader("Add a New Event")
-    name = st.text_input("Event Name")
-    organizer = st.text_input("Organizer Name")
-    description = st.text_area("Event Description")
-    date = st.date_input("Event Date", value=datetime.now())
-    time = st.time_input("Event Time", value=datetime.now().time())
-    max_participants = st.number_input("Max Participants", min_value=1, step=1)
-    event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
-    location_lat = st.number_input("Latitude", format="%.6f")
-    location_lng = st.number_input("Longitude", format="%.6f")
-    cancellation_prob = random.randint(5, 30)
-    weather_forecast = random.choice(["Sunny 🌞", "Cloudy ☁️", "Partly Cloudy ⛅"])
-    weather_temp = random.randint(5, 20)
-
-    if st.form_submit_button("Add Event"):
-        if name and organizer and description and location_lat and location_lng:
-            new_event = {
-                "name": name,
-                "organizer": organizer,
-                "location": [location_lat, location_lng],
-                "date": date.strftime("%Y-%m-%d"),
-                "time": time.strftime("%H:%M"),
-                "description": description,
-                "participants": 0,
-                "max_participants": max_participants,
-                "event_type": event_type,
-                "cancellation_prob": cancellation_prob,
-                "weather": {"forecast": weather_forecast, "temp": weather_temp}
-            }
-            try:
-                insert_event(new_event)
-                st.success(f"Event '{name}' added successfully!")
-                st.rerun()  # Reload the page to show updated events
-            except Exception as e:
-                st.error(f"Error adding event: {e}")
-        else:
-            st.error("Please fill in all fields!")
-
 # Display all Events next to the map
 st.subheader("All Events")
 for event in events:
-    st.write(f"- {event['name']} | {event['time']} | Organized by {event['organizer']}")
+    st.write(f"- **{event['name']}** on {event['date']} at {event['time']} (Organized by {event['organizer']})")
+    st.write(f"  Description: {event['description']}")
 
 # Display Joined Events
 st.subheader("Your Joined Events")
@@ -256,5 +217,4 @@ if user_events:
             st.write(f"- {event['name']} on {event['date']} at {event['time']} (Organized by {event['organizer']})")
 else:
     st.write("You have not joined any events yet.")
-
 
