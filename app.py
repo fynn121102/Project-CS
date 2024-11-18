@@ -83,7 +83,7 @@ def update_participants(event_id, new_participants):
     conn.close()
 
 # Render map with events
-def render_map(events, user_enrolled_events, search_query=""):
+def render_map(events, search_query=""):
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
     filtered_events = [
         event for event in events
@@ -97,10 +97,7 @@ def render_map(events, user_enrolled_events, search_query=""):
         cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
                                 f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
                                 f'</div>'
-        if event in user_enrolled_events:
-            action_button = f'<button onclick="window.location.href=\'?leave_event={event["id"]}\'">Leave Event</button>'
-        else:
-            action_button = f'<button onclick="window.location.href=\'?join_event={event["id"]}\'">Join Event</button>'
+        action_button = f'<button onclick="window.location.href=\'?join_event={event["id"]}\'">Join Event</button>'
         popup_content = f"""
         <div style="font-family:Arial; width:250px;">
             <h4>{event['name']}</h4>
@@ -134,8 +131,9 @@ setup_database()
 # Fetch events
 events = fetch_events()
 
-# User's enrolled events (for this session only)
-user_enrolled_events = []
+# Initialize session state for user's enrolled events if not already initialized
+if "user_enrolled_events" not in st.session_state:
+    st.session_state.user_enrolled_events = []
 
 # Handle Join/Leave Events
 params = st.experimental_get_query_params()
@@ -144,24 +142,15 @@ if "join_event" in params:
     for event in events:
         if event["id"] == event_id and event["participants"] < event["max_participants"]:
             event["participants"] += 1
-            user_enrolled_events.append(event)  # Add the event to the user's list
+            st.session_state.user_enrolled_events.append(event)  # Add the event to the user's list
             update_participants(event_id, event["participants"])
-    st.experimental_set_query_params()
-
-if "leave_event" in params:
-    event_id = int(params["leave_event"][0])
-    for event in events:
-        if event["id"] == event_id:
-            event["participants"] -= 1
-            user_enrolled_events = [e for e in user_enrolled_events if e["id"] != event_id]  # Remove event from the user's list
-            update_participants(event_id, event["participants"])
-    st.experimental_set_query_params()
+    st.experimental_set_query_params()  # Refresh query parameters
 
 # Search Bar
 search_query = st.text_input("Search events", "")
 
 # Display Map
-map_ = render_map(events, user_enrolled_events, search_query=search_query)
+map_ = render_map(events, search_query=search_query)
 st_folium(map_, width=700)
 
 # Add a New Event
@@ -198,7 +187,7 @@ with st.form("add_event_form"):
             try:
                 insert_event(new_event)
                 st.success(f"Event '{name}' added successfully!")
-                st.rerun()  # Updated method
+                st.rerun()  # Refresh the page
             except Exception as e:
                 st.error(f"Error adding event: {e}")
         else:
@@ -206,8 +195,8 @@ with st.form("add_event_form"):
 
 # Display Joined Events
 st.subheader("Your Joined Events")
-if user_enrolled_events:
-    for event in user_enrolled_events:
+if st.session_state.user_enrolled_events:
+    for event in st.session_state.user_enrolled_events:
         st.write(f"- {event['name']} on {event['date']} at {event['time']}")
 else:
     st.write("You have not joined any events yet.")
