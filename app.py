@@ -144,7 +144,7 @@ if "join_event" in params:
     for event in events:
         if event["id"] == event_id and event["participants"] < event["max_participants"]:
             event["participants"] += 1
-            user_enrolled_events.append(event)
+            user_enrolled_events.append(event)  # Add the event to the user's list
             update_participants(event_id, event["participants"])
     st.experimental_set_query_params()
 
@@ -153,7 +153,7 @@ if "leave_event" in params:
     for event in events:
         if event["id"] == event_id:
             event["participants"] -= 1
-            user_enrolled_events.remove(event)
+            user_enrolled_events = [e for e in user_enrolled_events if e["id"] != event_id]  # Remove event from the user's list
             update_participants(event_id, event["participants"])
     st.experimental_set_query_params()
 
@@ -211,4 +211,3 @@ if user_enrolled_events:
         st.write(f"- {event['name']} on {event['date']} at {event['time']}")
 else:
     st.write("You have not joined any events yet.")
-
