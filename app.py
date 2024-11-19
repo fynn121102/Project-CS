@@ -244,5 +244,3 @@ if user_events:
             st.write(f"- {event['name']} on {event['date']} at {event['time']} (Organized by {event['organizer']})")
 else:
     st.write("You have not joined any events yet.")
-
-
