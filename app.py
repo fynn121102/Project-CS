@@ -125,7 +125,7 @@ def render_map(events, user_enrolled_events, search_query=""):
     return base_map
 
 # App setup
-st.title("Community-Bridger")
+st.title("JoinMy")
 st.header("Connect with fellows around you!")
 
 # Setup the database
