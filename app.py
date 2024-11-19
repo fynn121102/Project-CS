@@ -5,10 +5,11 @@ import sqlite3
 from datetime import datetime
 import random
 
-# Database setup for events
-def setup_events_database():
+# Database setup
+def setup_database():
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
+    # Create the events table if it doesn't exist
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY,
@@ -25,21 +26,6 @@ def setup_events_database():
             cancellation_prob INTEGER,
             weather_forecast TEXT,
             weather_temp INTEGER
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-# Database setup for user event enrollment
-def setup_user_events_database():
-    conn = sqlite3.connect("user_events.db")
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_events (
-            user_id INTEGER,
-            event_id INTEGER,
-            PRIMARY KEY (user_id, event_id),
-            FOREIGN KEY (event_id) REFERENCES events(id)
         )
     ''')
     conn.commit()
@@ -88,27 +74,7 @@ def fetch_events():
         })
     return events
 
-# Insert a user's event participation into the database
-def insert_user_event(user_id, event_id):
-    conn = sqlite3.connect("user_events.db")
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO user_events (user_id, event_id)
-        VALUES (?, ?)
-    ''', (user_id, event_id))
-    conn.commit()
-    conn.close()
-
-# Fetch a user's joined events
-def fetch_user_events(user_id):
-    conn = sqlite3.connect("user_events.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT event_id FROM user_events WHERE user_id = ?", (user_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    return [row[0] for row in rows]  # Return event IDs
-
-# Update participants count in the events table
+# Update participants count in the database
 def update_participants(event_id, new_participants):
     conn = sqlite3.connect("events.db")
     cursor = conn.cursor()
@@ -117,7 +83,7 @@ def update_participants(event_id, new_participants):
     conn.close()
 
 # Render map with events
-def render_map(events, search_query=""):
+def render_map(events, user_enrolled_events, search_query=""):
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
     filtered_events = [
         event for event in events
@@ -131,6 +97,10 @@ def render_map(events, search_query=""):
         cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
                                 f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
                                 f'</div>'
+        if event in user_enrolled_events:
+            action_button = f'<button onclick="window.location.href=\'?leave_event={event["id"]}\'">Leave Event</button>'
+        else:
+            action_button = f'<button onclick="window.location.href=\'?join_event={event["id"]}\'">Join Event</button>'
         popup_content = f"""
         <div style="font-family:Arial; width:250px;">
             <h4>{event['name']}</h4>
@@ -143,6 +113,7 @@ def render_map(events, search_query=""):
             <p>{event['participants']} / {event['max_participants']}</p>
             <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
             {cancellation_prob_bar}
+            {action_button}
         </div>
         """
         folium.Marker(
@@ -157,36 +128,40 @@ def render_map(events, search_query=""):
 st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
 
-# Setup the databases
-setup_events_database()
-setup_user_events_database()
+# Setup the database
+setup_database()
 
 # Fetch events
 events = fetch_events()
 
-# User session handling (simulating a user)
-if "user_id" not in st.session_state:
-    st.session_state.user_id = random.randint(1, 1000)  # Simulate a user ID
+# User's enrolled events (for this session only)
+user_enrolled_events = []
 
-# Handle Join Event
-if "join_event_id" in st.session_state:
-    event_id = st.session_state.pop("join_event_id")
-    user_events = fetch_user_events(st.session_state.user_id)
+# Handle Join/Leave Events
+params = st.experimental_get_query_params()
+if "join_event" in params:
+    event_id = int(params["join_event"][0])
+    for event in events:
+        if event["id"] == event_id and event["participants"] < event["max_participants"]:
+            event["participants"] += 1
+            user_enrolled_events.append(event)
+            update_participants(event_id, event["participants"])
+    st.experimental_set_query_params()
 
-    if event_id not in user_events:
-        for event in events:
-            if event["id"] == event_id and event["participants"] < event["max_participants"]:
-                event["participants"] += 1
-                update_participants(event_id, event["participants"])
-                insert_user_event(st.session_state.user_id, event_id)  # Insert user-event relation
-                st.success(f"Joined event '{event['name']}' successfully!")
-                st.experimental_rerun()
+if "leave_event" in params:
+    event_id = int(params["leave_event"][0])
+    for event in events:
+        if event["id"] == event_id:
+            event["participants"] -= 1
+            user_enrolled_events.remove(event)
+            update_participants(event_id, event["participants"])
+    st.experimental_set_query_params()
 
 # Search Bar
 search_query = st.text_input("Search events", "")
 
 # Display Map
-map_ = render_map(events, search_query=search_query)
+map_ = render_map(events, user_enrolled_events, search_query=search_query)
 st_folium(map_, width=700)
 
 # Add a New Event
@@ -223,25 +198,16 @@ with st.form("add_event_form"):
             try:
                 insert_event(new_event)
                 st.success(f"Event '{name}' added successfully!")
-                st.experimental_rerun()  # Reload the page to show updated events
+                st.rerun()  # Updated method
             except Exception as e:
                 st.error(f"Error adding event: {e}")
         else:
             st.error("Please fill in all fields!")
 
-# Display all Events next to the map
-st.subheader("All Events")
-for event in events:
-    st.write(f"- {event['name']} | {event['date']} | {event['time']} | Organized by {event['organizer']}")
-
 # Display Joined Events
 st.subheader("Your Joined Events")
-user_events = fetch_user_events(st.session_state.user_id)
-if user_events:
-    for event_id in user_events:
-        event = next((e for e in events if e["id"] == event_id), None)
-        if event:
-            st.write(f"- {event['name']} on {event['date']} at {event['time']} (Organized by {event['organizer']})")
+if user_enrolled_events:
+    for event in user_enrolled_events:
+        st.write(f"- {event['name']} on {event['date']} at {event['time']}")
 else:
     st.write("You have not joined any events yet.")
-
