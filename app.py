@@ -106,8 +106,7 @@ def fetch_user_events(user_id):
     cursor.execute("SELECT event_id FROM user_events WHERE user_id = ?", (user_id,))
     rows = cursor.fetchall()
     conn.close()
-
-    return [row[0] for row in rows]  # Return only the event IDs
+    return [row[0] for row in rows]  # Return event IDs
 
 # Update participants count in the events table
 def update_participants(event_id, new_participants):
@@ -117,78 +116,133 @@ def update_participants(event_id, new_participants):
     conn.commit()
     conn.close()
 
-# Handle Join Event Action
-def handle_join_event(user_id, event_id):
-    events = fetch_events()
-    user_events = fetch_user_events(user_id)
-
-    for event in events:
-        if event["id"] == event_id:
-            if event_id in user_events:
-                st.warning("You have already joined this event.")
-            elif event["participants"] >= event["max_participants"]:
-                st.error("This event is already full!")
-            else:
-                event["participants"] += 1
-                update_participants(event_id, event["participants"])
-                insert_user_event(user_id, event_id)
-                st.success(f"Successfully joined '{event['name']}'!")
-            break
-
-    st.experimental_rerun()
-
 # Render map with events
-def render_map(events, user_id):
+def render_map(events, search_query=""):
     base_map = folium.Map(location=[47.4239, 9.3748], zoom_start=14)
-    for event in events:
+    filtered_events = [
+        event for event in events
+        if search_query.lower() in event["name"].lower() or search_query.lower() in event["description"].lower()
+    ]
+    for event in filtered_events:
+        participants_ratio = event["participants"] / event["max_participants"]
+        participant_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
+                          f'<div style="width: {participants_ratio * 100}%; background-color: green; height: 10px;"></div>' \
+                          f'</div>'
+        cancellation_prob_bar = f'<div style="width: 100%; background-color: grey; height: 10px;">' \
+                                f'<div style="width: {event["cancellation_prob"]}%; background-color: red; height: 10px;"></div>' \
+                                f'</div>'
         popup_content = f"""
-        <div>
+        <div style="font-family:Arial; width:250px;">
             <h4>{event['name']}</h4>
-            <p><b>Organizer:</b> {event['organizer']}</p>
+            <p><b>Organized by:</b> {event['organizer']}</p>
             <p><b>Date:</b> {event['date']} at {event['time']}</p>
             <p><b>Description:</b> {event['description']}</p>
+            <p><b>Weather:</b> {event['weather']['forecast']} ({event['weather']['temp']}°C)</p>
+            <p><b>Participants:</b></p>
+            {participant_bar}
+            <p>{event['participants']} / {event['max_participants']}</p>
+            <p><b>Cancellation Probability:</b> {event['cancellation_prob']}%</p>
+            {cancellation_prob_bar}
         </div>
         """
         folium.Marker(
             location=event["location"],
-            icon=folium.Icon(color="blue"),
-            popup=folium.Popup(popup_content, max_width=300)
+            icon=folium.Icon(color="blue", icon="info-sign"),
+            popup=folium.Popup(popup_content, max_width=300),
+            tooltip=event["name"]
         ).add_to(base_map)
     return base_map
-
-# Display All Events
-def display_events(events, user_id):
-    user_events = fetch_user_events(user_id)
-    st.subheader("Available Events")
-    for event in events:
-        st.markdown(f"""
-        **Name**: {event['name']}  
-        **Date**: {event['date']}  
-        **Time**: {event['time']}  
-        **Organizer**: {event['organizer']}  
-        **Description**: {event['description']}  
-        """)
-        if event["id"] in user_events:
-            st.button("Already Joined", disabled=True, key=f"joined_{event['id']}")
-        elif event["participants"] >= event["max_participants"]:
-            st.button("Event Full", disabled=True, key=f"full_{event['id']}")
-        else:
-            if st.button(f"Join '{event['name']}'", key=f"join_{event['id']}"):
-                handle_join_event(user_id, event["id"])
 
 # App setup
 st.title("Community-Bridger")
 st.header("Connect with fellows around you!")
 
+# Setup the databases
 setup_events_database()
 setup_user_events_database()
 
-if "user_id" not in st.session_state:
-    st.session_state.user_id = random.randint(1, 1000)
-
+# Fetch events
 events = fetch_events()
 
-map_ = render_map(events, st.session_state.user_id)
+# User session handling (simulating a user)
+if "user_id" not in st.session_state:
+    st.session_state.user_id = random.randint(1, 1000)  # Simulate a user ID
+
+# Handle Join Event
+if "join_event_id" in st.session_state:
+    event_id = st.session_state.pop("join_event_id")
+    user_events = fetch_user_events(st.session_state.user_id)
+
+    if event_id not in user_events:
+        for event in events:
+            if event["id"] == event_id and event["participants"] < event["max_participants"]:
+                event["participants"] += 1
+                update_participants(event_id, event["participants"])
+                insert_user_event(st.session_state.user_id, event_id)  # Insert user-event relation
+                st.success(f"Joined event '{event['name']}' successfully!")
+                st.experimental_rerun()
+
+# Search Bar
+search_query = st.text_input("Search events", "")
+
+# Display Map
+map_ = render_map(events, search_query=search_query)
 st_folium(map_, width=700)
 
-display_events(events, st.session_state.user_id)
+# Add a New Event
+with st.form("add_event_form"):
+    st.subheader("Add a New Event")
+    name = st.text_input("Event Name")
+    organizer = st.text_input("Organizer Name")
+    description = st.text_area("Event Description")
+    date = st.date_input("Event Date", value=datetime.now())
+    time = st.time_input("Event Time", value=datetime.now().time())
+    max_participants = st.number_input("Max Participants", min_value=1, step=1)
+    event_type = st.selectbox("Event Type", ["outdoor", "indoor"])
+    location_lat = st.number_input("Latitude", format="%.6f")
+    location_lng = st.number_input("Longitude", format="%.6f")
+    cancellation_prob = random.randint(5, 30)
+    weather_forecast = random.choice(["Sunny 🌞", "Cloudy ☁️", "Partly Cloudy ⛅"])
+    weather_temp = random.randint(5, 20)
+
+    if st.form_submit_button("Add Event"):
+        if name and organizer and description and location_lat and location_lng:
+            new_event = {
+                "name": name,
+                "organizer": organizer,
+                "location": [location_lat, location_lng],
+                "date": date.strftime("%Y-%m-%d"),
+                "time": time.strftime("%H:%M"),
+                "description": description,
+                "participants": 0,
+                "max_participants": max_participants,
+                "event_type": event_type,
+                "cancellation_prob": cancellation_prob,
+                "weather": {"forecast": weather_forecast, "temp": weather_temp}
+            }
+            try:
+                insert_event(new_event)
+                st.success(f"Event '{name}' added successfully!")
+                st.experimental_rerun()  # Reload the page to show updated events
+            except Exception as e:
+                st.error(f"Error adding event: {e}")
+        else:
+            st.error("Please fill in all fields!")
+
+# Display all Events next to the map
+st.subheader("All Events")
+for event in events:
+    st.write(f"- {event['name']} | {event['date']} | {event['time']} | Organized by {event['organizer']}")
+
+# Display Joined Events
+st.subheader("Your Joined Events")
+user_events = fetch_user_events(st.session_state.user_id)
+if user_events:
+    for event_id in user_events:
+        event = next((e for e in events if e["id"] == event_id), None)
+        if event:
+            st.write(f"- {event['name']} on {event['date']} at {event['time']} (Organized by {event['organizer']})")
+else:
+    st.write("You have not joined any events yet.")
+
+
